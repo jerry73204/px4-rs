@@ -7,7 +7,7 @@ complete; move finished phases to `archived/`.
 | Phase | Title | Status |
 | ----- | ----- | ------ |
 | 01 | Workspace scaffold | In Progress |
-| 02 | `px4-sys` FFI bindings | Not Started |
+| 02 | `px4-sys` FFI bindings | Complete |
 | 03 | `px4-log` + panic handler | Not Started |
 | 04 | `px4-workqueue` + `#[task]` macro | Not Started |
 | 05 | `px4-msg-codegen` + `#[px4_message]` macro | Not Started |

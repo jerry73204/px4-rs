@@ -1,0 +1,26 @@
+[package]
+name          = "px4-sys"
+version       = { workspace = true }
+edition       = "2021"
+rust-version  = { workspace = true }
+license       = { workspace = true }
+repository    = { workspace = true }
+authors       = { workspace = true }
+description   = "Minimal audited FFI to PX4 Autopilot (WorkQueue, uORB, hrt, log)."
+links         = "px4"
+readme        = "README.md"
+categories    = ["external-ffi-bindings", "embedded", "no-std"]
+keywords      = ["px4", "uorb", "autopilot", "ffi"]
+
+[lib]
+doctest = false
+
+[features]
+default = []
+# Enable to force bindgen to regenerate into OUT_DIR even when the vendored
+# snapshot is up to date (normally driven by `just gen-sys`).
+regen = []
+
+[build-dependencies]
+bindgen = { workspace = true }
+cc      = "1"

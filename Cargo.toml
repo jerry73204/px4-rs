@@ -1,15 +1,15 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/px4-sys",
+    "xtask",
     # Scaffolded in later phases:
-    # "crates/px4-sys",
     # "crates/px4-log",
     # "crates/px4-workqueue",
     # "crates/px4-workqueue-macros",
     # "crates/px4-msg-codegen",
     # "crates/px4-msg-macros",
     # "crates/px4-uorb",
-    # "xtask",
 ]
 
 [workspace.package]
