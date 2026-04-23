@@ -1,0 +1,23 @@
+[package]
+name          = "px4-workqueue"
+version       = { workspace = true }
+edition       = { workspace = true }
+rust-version  = { workspace = true }
+license       = { workspace = true }
+repository    = { workspace = true }
+authors       = { workspace = true }
+description   = "Rust async runtime on PX4's WorkQueue. One task ≡ one WorkItem."
+
+[lib]
+doctest = false
+
+[dependencies]
+px4-sys              = { workspace = true }
+px4-log              = { workspace = true }
+px4-workqueue-macros = { workspace = true }
+
+[features]
+default = []
+# Swap the px4-sys FFI surface for an in-process mock that executes
+# WorkItems on a std::thread pool. Used by host unit tests.
+std = ["px4-log/std"]

@@ -1,0 +1,17 @@
+[package]
+name          = "px4-workqueue-macros"
+version       = { workspace = true }
+edition       = "2021"
+rust-version  = { workspace = true }
+license       = { workspace = true }
+repository    = { workspace = true }
+authors       = { workspace = true }
+description   = "#[task(wq = \"...\")] proc macro for px4-workqueue."
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = { workspace = true }
+quote       = { workspace = true }
+syn         = { workspace = true }
