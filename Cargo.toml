@@ -1,0 +1,47 @@
+[workspace]
+resolver = "3"
+members = [
+    # Scaffolded in later phases:
+    # "crates/px4-sys",
+    # "crates/px4-log",
+    # "crates/px4-workqueue",
+    # "crates/px4-workqueue-macros",
+    # "crates/px4-msg-codegen",
+    # "crates/px4-msg-macros",
+    # "crates/px4-uorb",
+    # "xtask",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "BSD-3-Clause"
+repository = "https://github.com/aeon/px4-rs"
+authors = ["px4-rs contributors"]
+
+[workspace.dependencies]
+# Internal crates pinned to the workspace version.
+px4-sys               = { version = "0.1", path = "crates/px4-sys" }
+px4-log               = { version = "0.1", path = "crates/px4-log" }
+px4-workqueue         = { version = "0.1", path = "crates/px4-workqueue" }
+px4-workqueue-macros  = { version = "0.1", path = "crates/px4-workqueue-macros" }
+px4-msg-codegen       = { version = "0.1", path = "crates/px4-msg-codegen" }
+px4-msg-macros        = { version = "0.1", path = "crates/px4-msg-macros" }
+px4-uorb              = { version = "0.1", path = "crates/px4-uorb" }
+
+# Third-party.
+bindgen    = { version = "0.70", default-features = false, features = ["runtime"] }
+proc-macro2 = "1"
+quote      = "1"
+syn        = { version = "2", features = ["full"] }
+log        = { version = "0.4", default-features = false }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+opt-level = "s"
+
+[profile.dev]
+panic = "abort"

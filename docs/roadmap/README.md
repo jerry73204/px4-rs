@@ -1,0 +1,18 @@
+# px4-rs Roadmap
+
+Phases are numbered in implementation order. Each phase is independently
+mergeable and has its own acceptance criteria. Mark items `- [x]` when
+complete; move finished phases to `archived/`.
+
+| Phase | Title | Status |
+| ----- | ----- | ------ |
+| 01 | Workspace scaffold | In Progress |
+| 02 | `px4-sys` FFI bindings | Not Started |
+| 03 | `px4-log` + panic handler | Not Started |
+| 04 | `px4-workqueue` + `#[task]` macro | Not Started |
+| 05 | `px4-msg-codegen` + `#[px4_message]` macro | Not Started |
+| 06 | `px4-uorb` typed pub/sub | Not Started |
+| 07 | CMake integration + first end-to-end module on Pixhawk | Not Started |
+| 08 | Examples (hello_module, gyro_watch, multi_task) | Not Started |
+| 09 | Host-side mock + unit tests | Not Started |
+| 10 | Documentation polish + crates.io publish | Not Started |

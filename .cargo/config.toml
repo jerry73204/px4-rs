@@ -1,0 +1,17 @@
+# Host-test builds default to the host triple. Target builds are driven by
+# `just build-target <triple>` or by PX4's CMake invoking cargo with --target.
+
+[build]
+# no default target — `cargo build` on the host runs unit tests only
+
+[target.thumbv7em-none-eabihf]
+rustflags = [
+    "-C", "link-arg=--nmagic",
+    "-C", "force-frame-pointers=yes",
+]
+
+[target.thumbv8m.main-none-eabihf]
+rustflags = [
+    "-C", "link-arg=--nmagic",
+    "-C", "force-frame-pointers=yes",
+]
