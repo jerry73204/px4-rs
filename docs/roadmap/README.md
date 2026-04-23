@@ -10,7 +10,7 @@ complete; move finished phases to `archived/`.
 | 02 | `px4-sys` FFI bindings | Complete |
 | 03 | `px4-log` + panic handler | Complete |
 | 04 | `px4-workqueue` + `#[task]` macro | Core landed; primitives deferred |
-| 05 | `px4-msg-codegen` + `#[px4_message]` macro | Not Started |
+| 05 | `px4-msg-codegen` + `#[px4_message]` macro | Complete |
 | 06 | `px4-uorb` typed pub/sub | Not Started |
 | 07 | CMake integration + first end-to-end module on Pixhawk | Not Started |
 | 08 | Examples (hello_module, gyro_watch, multi_task) | Not Started |

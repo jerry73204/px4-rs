@@ -6,3 +6,6 @@
 /.env
 *.swp
 .DS_Store
+
+# xtask gen-msgs output — regenerated per PX4 checkout, not committed
+/crates/px4-msg-codegen/generated/

@@ -1,17 +1,16 @@
 [package]
-name          = "xtask"
+name          = "px4-msg-codegen"
 version       = { workspace = true }
 edition       = { workspace = true }
 rust-version  = { workspace = true }
 license       = { workspace = true }
 repository    = { workspace = true }
 authors       = { workspace = true }
-publish       = false
+description   = "Parser + layout + Rust emitter for PX4 uORB .msg files."
 
-[[bin]]
-name = "xtask"
-path = "src/main.rs"
+[lib]
+doctest = false
 
 [dependencies]
-bindgen         = { workspace = true }
-px4-msg-codegen = { workspace = true }
+proc-macro2 = { workspace = true }
+quote       = { workspace = true }
