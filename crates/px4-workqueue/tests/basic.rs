@@ -116,8 +116,7 @@ mod double_spawn_returns_busy {
 
         let err = CELL
             .try_spawn(make(), &wq_configurations::test1, c"busy2")
-            .err()
-            .expect("second spawn should fail");
+            .expect_err("second spawn should fail");
         assert_eq!(err, SpawnError::Busy);
     }
 }

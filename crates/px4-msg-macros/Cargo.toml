@@ -16,3 +16,10 @@ proc-macro2     = { workspace = true }
 quote           = { workspace = true }
 syn             = { workspace = true }
 px4-msg-codegen = { workspace = true }
+
+[dev-dependencies]
+# The macro emits references to ::px4_uorb and ::px4_sys, so test
+# crates that *use* the macro need them in scope. They're dev-only
+# here because the macro itself doesn't link them.
+px4-sys  = { workspace = true }
+px4-uorb = { workspace = true }

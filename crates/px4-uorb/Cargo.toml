@@ -1,0 +1,27 @@
+[package]
+name          = "px4-uorb"
+version       = { workspace = true }
+edition       = { workspace = true }
+rust-version  = { workspace = true }
+license       = { workspace = true }
+repository    = { workspace = true }
+authors       = { workspace = true }
+description   = "Typed Publication / Subscription wrappers around PX4 uORB."
+
+[lib]
+doctest = false
+
+[dependencies]
+px4-sys       = { workspace = true }
+px4-workqueue = { workspace = true }
+
+[features]
+default = []
+# In-process broker that mocks the px4-sys orb / sub_cb FFI for host
+# unit tests. Pulls px4-workqueue's matching mock so a single test
+# can spawn tasks and exchange messages without a PX4 link target.
+std = ["px4-workqueue/std"]
+
+[dev-dependencies]
+px4-msg-macros = { workspace = true }
+px4-workqueue  = { workspace = true, features = ["std"] }

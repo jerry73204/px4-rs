@@ -35,6 +35,12 @@ pub fn emit(laid: &LaidOutMsg) -> TokenStream {
 
     let size = laid.size;
 
+    let topic_items: Vec<TokenStream> = laid
+        .topics
+        .iter()
+        .map(|topic_name| emit_topic(&laid.name, topic_name, size, &laid.constants))
+        .collect();
+
     quote! {
         #[repr(C)]
         #[derive(Copy, Clone)]
@@ -51,6 +57,72 @@ pub fn emit(laid: &LaidOutMsg) -> TokenStream {
             ::core::mem::size_of::<#name>() == #size,
             concat!("px4-msg-codegen: layout size mismatch for ", stringify!(#name)),
         );
+
+        #(#topic_items)*
+    }
+}
+
+/// Emit a per-topic ZST + `OrbMetadata` static + `impl UorbTopic`.
+///
+/// PX4 messages can publish under multiple topic names via the
+/// `# TOPICS` directive, so a single payload struct gets one of these
+/// blocks per topic. The synthesized `orb_metadata` uses the topic
+/// name as `o_name`; PX4's broker resolves nodes by name, so this
+/// interoperates with C++ publishers/subscribers of the same name.
+///
+/// Limitations vs. PX4's canonical metadata:
+///   * `message_hash` is `0` (compatibility check disabled — use the
+///     same struct definition on both sides).
+///   * `o_id` is `u16::MAX` (sentinel; not used by the standard
+///     orb_advertise/publish/subscribe path).
+fn emit_topic(
+    struct_name: &str,
+    topic_name: &str,
+    size: usize,
+    constants: &[Constant],
+) -> TokenStream {
+    let struct_ident = Ident::new(struct_name, Span::call_site());
+    let topic_ident = Ident::new(topic_name, Span::call_site());
+    let meta_ident = format_ident!("__ORB_META_{}", topic_name.to_uppercase());
+    let cname_ident = format_ident!("__ORB_NAME_{}", topic_name.to_uppercase());
+    let topic_cstr = format!("{topic_name}\0");
+    let size_u16 = size as u16;
+
+    // Pull queue size from a `ORB_QUEUE_LENGTH` constant if present;
+    // otherwise default to 1 (PX4's default queue depth).
+    let queue: TokenStream = constants
+        .iter()
+        .find(|c| c.name == "ORB_QUEUE_LENGTH")
+        .map(|c| c.value.parse::<TokenStream>().unwrap_or_else(|_| quote!(1)))
+        .unwrap_or_else(|| quote!(1));
+
+    quote! {
+        #[allow(non_camel_case_types)]
+        pub struct #topic_ident;
+
+        #[allow(non_upper_case_globals)]
+        const #cname_ident: &'static ::core::ffi::CStr = unsafe {
+            ::core::ffi::CStr::from_bytes_with_nul_unchecked(#topic_cstr.as_bytes())
+        };
+
+        #[allow(non_upper_case_globals)]
+        static #meta_ident: ::px4_uorb::OrbMetadata = ::px4_uorb::OrbMetadata::new(
+            ::px4_sys::orb_metadata {
+                o_name: #cname_ident.as_ptr(),
+                o_size: #size_u16,
+                o_size_no_padding: #size_u16,
+                message_hash: 0,
+                o_id: u16::MAX,
+                o_queue: (#queue) as u8,
+            }
+        );
+
+        impl ::px4_uorb::UorbTopic for #topic_ident {
+            type Msg = #struct_ident;
+            fn metadata() -> &'static ::px4_sys::orb_metadata {
+                #meta_ident.get()
+            }
+        }
     }
 }
 

@@ -52,12 +52,15 @@ pub struct WorkItemCell<F> {
     _pin: PhantomPinned,
 }
 
-// SAFETY: All reads/writes of `future` are gated on `state` bits.
-// `F: Send` is enforced on spawn.
-unsafe impl<F: Send> Send for WorkItemCell<F> {}
-unsafe impl<F: Send> Sync for WorkItemCell<F> {}
+// SAFETY: a WorkItemCell is owned end-to-end by the PX4 WorkQueue
+// pthread it's attached to; we never poll the future from any other
+// thread. The Sync impl is required so that `static CELL: WorkItemCell<F>`
+// is permitted, but no actual cross-thread access of the inner future
+// or state ever happens.
+unsafe impl<F> Send for WorkItemCell<F> {}
+unsafe impl<F> Sync for WorkItemCell<F> {}
 
-impl<F: Future<Output = ()> + Send + 'static> WorkItemCell<F> {
+impl<F: Future<Output = ()> + 'static> WorkItemCell<F> {
     pub const fn new() -> Self {
         Self {
             bits: TaskStateBits {
@@ -185,7 +188,7 @@ impl<F: Future<Output = ()> + Send + 'static> WorkItemCell<F> {
     }
 }
 
-impl<F: Future<Output = ()> + Send + 'static> Default for WorkItemCell<F> {
+impl<F: Future<Output = ()> + 'static> Default for WorkItemCell<F> {
     fn default() -> Self {
         Self::new()
     }

@@ -7,9 +7,8 @@ members = [
     "crates/px4-workqueue-macros",
     "crates/px4-msg-codegen",
     "crates/px4-msg-macros",
+    "crates/px4-uorb",
     "xtask",
-    # Scaffolded in later phases:
-    # "crates/px4-uorb",
 ]
 
 [workspace.package]

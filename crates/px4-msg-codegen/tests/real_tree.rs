@@ -29,8 +29,7 @@ fn every_msg_parses_and_lays_out() {
         if path.extension().and_then(|s| s.to_str()) != Some("msg") {
             continue;
         }
-        let def = parse_file(&path)
-            .unwrap_or_else(|e| panic!("parse {}: {e}", path.display()));
+        let def = parse_file(&path).unwrap_or_else(|e| panic!("parse {}: {e}", path.display()));
         resolver
             .layout(&def)
             .unwrap_or_else(|e| panic!("layout {}: {e}", path.display()));
