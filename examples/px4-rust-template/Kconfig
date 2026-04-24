@@ -1,0 +1,7 @@
+menuconfig MODULES_PX4_RUST_TEMPLATE
+	bool "px4_rust_template (Rust skeleton)"
+	default n
+	---help---
+		Skeleton PX4 module written in Rust. Spawns one task that
+		logs a hello message. Use as a starting point for your own
+		Rust modules.

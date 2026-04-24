@@ -1,0 +1,18 @@
+[package]
+name        = "heartbeat"
+version     = "0.1.0"
+edition     = "2024"
+publish     = false
+description = "Example PX4 Rust module — publishes Airspeed at a heartbeat rate."
+
+[lib]
+crate-type = ["staticlib"]
+doctest    = false
+
+[dependencies]
+px4-log              = { workspace = true, features = ["panic-handler"] }
+px4-sys              = { workspace = true }
+px4-uorb             = { workspace = true }
+px4-workqueue        = { workspace = true }
+px4-workqueue-macros = { workspace = true }
+px4-msg-macros       = { workspace = true }

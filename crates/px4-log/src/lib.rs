@@ -41,7 +41,12 @@ use core::ffi::c_int;
 use core::ffi::{CStr, c_char};
 use core::fmt::{self, Write};
 
-#[cfg(feature = "panic-handler")]
+// Only install the #[panic_handler] on bare-metal targets. On hosted
+// targets (linux/macos/windows) the std crate already supplies one,
+// and our `#[panic_handler]` attribute would conflict with it. This
+// lets the `panic-handler` feature be enabled unconditionally in a
+// PX4 module's Cargo.toml without breaking host clippy / tests.
+#[cfg(all(feature = "panic-handler", target_os = "none"))]
 mod panic;
 
 #[cfg(feature = "log")]

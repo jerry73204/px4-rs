@@ -1,0 +1,15 @@
+[package]
+name        = "px4_rust_template"
+version     = "0.1.0"
+edition     = "2024"
+publish     = false
+description = "Skeleton PX4 module written in Rust. Copy this directory and rename."
+
+[lib]
+crate-type = ["staticlib"]
+doctest    = false
+
+[dependencies]
+px4-log              = { workspace = true, features = ["panic-handler"] }
+px4-workqueue        = { workspace = true }
+px4-workqueue-macros = { workspace = true }

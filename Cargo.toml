@@ -8,6 +8,8 @@ members = [
     "crates/px4-msg-codegen",
     "crates/px4-msg-macros",
     "crates/px4-uorb",
+    "examples/px4-rust-template",
+    "examples/heartbeat",
     "xtask",
 ]
 

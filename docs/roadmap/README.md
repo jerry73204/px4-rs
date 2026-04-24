@@ -12,7 +12,7 @@ complete; move finished phases to `archived/`.
 | 04 | `px4-workqueue` + `#[task]` macro | Core landed; primitives deferred |
 | 05 | `px4-msg-codegen` + `#[px4_message]` macro | Complete |
 | 06 | `px4-uorb` typed pub/sub | Complete (single-instance) |
-| 07 | CMake integration + first end-to-end module on Pixhawk | Not Started |
+| 07 | CMake integration + first end-to-end module on Pixhawk | Infra complete; firmware-build untested |
 | 08 | Examples (hello_module, gyro_watch, multi_task) | Not Started |
 | 09 | Host-side mock + unit tests | Not Started |
 | 10 | Documentation polish + crates.io publish | Not Started |

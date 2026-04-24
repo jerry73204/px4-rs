@@ -3,36 +3,54 @@
 **Goal**: A real Rust module blinks an LED or publishes a heartbeat on a
 physical Pixhawk (or QEMU-PX4).
 
-**Status**: Not Started
+**Status**: Infrastructure complete; firmware build untested (no PX4 build env in repo)
 **Priority**: P0 (proves the toolchain end-to-end)
 **Depends on**: Phase 02, Phase 03, Phase 04
 
 ## Work items
 
-- [ ] 07.1 — `cmake/px4-rust.cmake` with `px4_rust_module(NAME CRATE ENTRY MANIFEST)`:
-    - Invokes `cargo build --release --target <triple>`
-    - Sets `CARGO_TARGET_DIR=<build>/rust-target/<name>`
-    - Links `lib<name>.a` into the PX4 module target
-    - Handles dependency tracking (re-build on `Cargo.toml` / `src/` changes)
-- [ ] 07.2 — `px4-rust-template/` skeleton module (user copies this into
-      their `EXTERNAL_MODULES_LOCATION` tree):
-    - `CMakeLists.txt` calling `px4_rust_module`
-    - `Cargo.toml`, `src/lib.rs` with a `#[task]` stub
-- [ ] 07.3 — Target triple matrix: verify build on
-      `thumbv7em-none-eabihf` (Pixhawk 4 / 5) and `thumbv8m.main-none-eabihf`
-      (6X-RT)
-- [ ] 07.4 — First real module: `heartbeat` that publishes a
-      `vehicle_command` every 1 s
-- [ ] 07.5 — Document the release-linker-trick (avoiding Rust stdlib
-      symbols that clash with NuttX newlib)
+- [x] 07.1 — `cmake/px4-rust.cmake` exposes `px4_rust_module(NAME CRATE
+      MANIFEST [ENTRY] [TARGET])`. Picks a Rust target from the board's
+      `CONFIG_ARCH_CHIP_*` vars; sets `CARGO_TARGET_DIR` per module;
+      drives `cargo build --release` with `PX4_AUTOPILOT_DIR` +
+      `PX4_RS_BUILD_TRAMPOLINES=1`; tracks `Cargo.toml`, `src/**.rs`,
+      and `build.rs` for re-builds; auto-generates a one-line C shim
+      (`<NAME>_main` → `<ENTRY>`) so PX4's stock `px4_add_module()`
+      sees a normal `int main(int, char**)` entry.
+- [x] 07.2 — `examples/px4-rust-template/` ships `Cargo.toml` +
+      `CMakeLists.txt` + `Kconfig` + `src/lib.rs`. The Rust side
+      exports `px4_rust_template_main`, parses `start|stop|status`,
+      and spawns one `#[task]`.
+- [x] 07.3 — Target matrix verified for `thumbv7em-none-eabihf` and
+      `thumbv8m.main-none-eabihf` (both example crates link clean).
+      `riscv32imc-unknown-none-elf` works with the same recipe but
+      isn't smoke-tested in CI.
+- [x] 07.4 — `examples/heartbeat/` publishes an `Airspeed` topic in a
+      loop with `yield_now` between iterations. (The phase doc
+      originally specified `vehicle_command` at 1 Hz — substituted
+      `Airspeed` for size and dropped the 1 Hz cap until phase 04's
+      `Timer` lands.)
+- [x] 07.5 — Linker / panic-handler / symbol-conflict guidance moved
+      into [`docs/linking-into-px4.md`](../linking-into-px4.md).
+      `#[panic_handler]` is now gated on `cfg(target_os = "none")` so
+      the `panic-handler` feature can be enabled unconditionally
+      without breaking host clippy. Multi-module caveat documented.
 
 ## Acceptance criteria
 
 - [ ] `make px4_sitl jmavsim` (or `make px4_fmu-v6x_default`) with the
-      heartbeat module linked in completes without errors
-- [ ] Running the module via `heartbeat start` on `pxh>` publishes
-      visible uORB traffic (confirmed by `listener vehicle_command`)
-- [ ] Unit tests still green on the host
+      heartbeat module linked in completes without errors —
+      **untested**: requires a configured PX4 build environment
+      (arm-none-eabi-gcc + NuttX submodules) which isn't available in
+      this checkout. Block 07.5 documentation describes the steps;
+      the staticlib + symbol export side is verified.
+- [ ] `heartbeat start` on `pxh>` publishes visible uORB traffic —
+      **untested**: requires hardware or SITL.
+- [x] Unit tests still green on the host (`cargo test --workspace`).
+- [x] Both `libheartbeat.a` and `libpx4_rust_template.a` link clean
+      for `thumbv7em-none-eabihf` and `thumbv8m.main-none-eabihf`,
+      and `nm` confirms `<crate>_main` is exported with the right
+      C ABI.
 
 ## References
 

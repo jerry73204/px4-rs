@@ -1,0 +1,6 @@
+menuconfig MODULES_HEARTBEAT
+	bool "heartbeat (Rust example)"
+	default n
+	---help---
+		Demonstration Rust PX4 module: publishes Airspeed messages
+		in a tight loop. Used as the phase-07 end-to-end smoke test.
