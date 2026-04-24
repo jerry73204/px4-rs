@@ -126,8 +126,16 @@ make px4_fmu-v6x_default boardguiconfig
 
 ### Step 6 — build
 
+For SITL (fastest path to a working binary):
+
 ```sh
-make px4_fmu-v6x_default
+make px4_sitl EXTERNAL_MODULES_LOCATION=~/my-externals
+```
+
+For real hardware:
+
+```sh
+make px4_fmu-v6x_default EXTERNAL_MODULES_LOCATION=~/my-externals
 ```
 
 The `px4_rust_module()` rule invokes `cargo build --release --target
@@ -212,3 +220,42 @@ arm-none-eabi-nm target/thumbv7em-none-eabihf/release/libheartbeat.a \
 
 The `nm` step confirms the `<crate>_main` symbol is exported, which
 is what the C shim forwards to.
+
+## Verifying the module inside a running PX4
+
+Once `make px4_sitl EXTERNAL_MODULES_LOCATION=…` has produced `bin/px4`,
+boot it and confirm your module is registered:
+
+```sh
+cd <px4-build-dir>
+./bin/px4 -d etc/init.d-posix/rcS &
+./bin/px4-<module-name> start      # e.g. ./bin/px4-heartbeat start
+./bin/px4-uorb status | grep <your-topic-name>
+```
+
+`px4-uorb status` shows every topic actually advertised in the broker.
+If your Rust `Publication<T>` is working, the topic appears there with
+`#SUB=0 Q=<queue> SIZE=<size>`.
+
+### Why `listener <topic>` may still say "never published"
+
+PX4's `listener` / `logger` tools rely on a **compile-time** table of
+topic metadata (`ORB_ID(name)` expands to a pointer into that table).
+A Rust `Publication` whose topic name isn't in PX4's canonical msg
+list is invisible to those tools even though it's live in the broker.
+
+Three options, in order of preference:
+
+1. **Publish an existing PX4 topic name.** The topic lookup in uORB
+   keys on `o_name`, so a Rust publication on e.g. `vehicle_command`
+   lands in the same broker node PX4 C++ subscribers read from.
+   Interop caveat: our synthesized `orb_metadata` leaves
+   `message_hash = 0`, so any PX4 code path that strictly checks the
+   hash for compatibility will reject.
+2. **Add the .msg file to `EXTERNAL_MODULES_LOCATION/msg/`** and a
+   `config_msg_list_external` in `<externals>/msg/CMakeLists.txt`.
+   This makes PX4's build generate the stock C++ metadata for the
+   topic, so `listener` / `logger` recognize it. See PX4's
+   [out-of-tree modules doc](https://docs.px4.io/main/en/advanced/out_of_tree_modules.html).
+3. **Use `uorb status` to verify.** The broker has ground truth;
+   bench-testing a Rust module doesn't require `listener`.
