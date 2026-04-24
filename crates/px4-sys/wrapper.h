@@ -127,6 +127,19 @@ void px4_rs_wi_schedule_clear(px4_rs_work_item *wi);
 void px4_rs_wi_delete(px4_rs_work_item *wi);
 
 /* ------------------------------------------------------------------ */
+/* Canonical orb_metadata lookup                                      */
+/*                                                                    */
+/* Returns the canonical `orb_metadata *` for a topic whose `o_name`  */
+/* matches the supplied C string, or NULL if no such topic is         */
+/* registered in PX4's compile-time topic list. Used by the Rust      */
+/* `UorbTopic::metadata()` impl to prefer PX4's real metadata over    */
+/* the codegen-synthesized one, which is necessary for stock PX4      */
+/* tooling (listener, logger) to observe the publications.            */
+/* ------------------------------------------------------------------ */
+
+const struct orb_metadata *px4_rs_find_orb_meta(const char *name);
+
+/* ------------------------------------------------------------------ */
 /* uORB SubscriptionCallback — trampoline                             */
 /* ------------------------------------------------------------------ */
 

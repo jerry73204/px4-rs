@@ -29,6 +29,7 @@ fn main() {
     println!("cargo:rerun-if-changed=wrapper.cpp");
     println!("cargo:rerun-if-env-changed=PX4_AUTOPILOT_DIR");
     println!("cargo:rerun-if-env-changed=PX4_RS_BUILD_TRAMPOLINES");
+    println!("cargo:rustc-check-cfg=cfg(px4_rs_trampolines)");
 
     generate_bindings(&crate_dir, &out_dir);
 
@@ -44,6 +45,9 @@ fn main() {
     // build does. CMake's `px4_rust_module()` sets this flag to opt in.
     if env::var_os("PX4_RS_BUILD_TRAMPOLINES").is_some() {
         compile_trampolines(&crate_dir, &px4_dir);
+        // Signal to lib.rs that real trampolines are linked in, so it
+        // skips the Rust-side stubs that would otherwise collide.
+        println!("cargo:rustc-cfg=px4_rs_trampolines");
     }
 }
 

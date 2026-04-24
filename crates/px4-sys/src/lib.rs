@@ -18,3 +18,18 @@
 #![allow(clippy::missing_safety_doc)]
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+
+// When the C++ trampolines weren't compiled (host builds without
+// PX4_RS_BUILD_TRAMPOLINES), provide a Rust-side stub so downstream
+// crates that call `px4_rs_find_orb_meta` still link. The stub always
+// returns null, and the caller falls back to the codegen-synthesized
+// `orb_metadata`. The Rust item name is prefixed to avoid colliding
+// with the bindgen-generated extern declaration; `#[export_name]`
+// publishes it under the FFI symbol the caller expects.
+#[cfg(not(px4_rs_trampolines))]
+#[unsafe(export_name = "px4_rs_find_orb_meta")]
+unsafe extern "C" fn __px4_rs_stub_find_orb_meta(
+    _name: *const ::core::ffi::c_char,
+) -> *const orb_metadata {
+    ::core::ptr::null()
+}

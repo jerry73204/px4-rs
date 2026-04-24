@@ -26,14 +26,6 @@ extern "C" {
 extern "C" {
     pub fn hrt_cancel(entry: *mut hrt_call);
 }
-extern "C" {
-    pub fn px4_log_modulename(
-        level: ::core::ffi::c_int,
-        module_name: *const ::core::ffi::c_char,
-        fmt: *const ::core::ffi::c_char,
-        ...
-    );
-}
 pub type orb_id_size_t = u16;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -91,6 +83,14 @@ extern "C" {
         instance: ::core::ffi::c_int,
     ) -> ::core::ffi::c_int;
 }
+extern "C" {
+    pub fn px4_log_modulename(
+        level: ::core::ffi::c_int,
+        module_name: *const ::core::ffi::c_char,
+        fmt: *const ::core::ffi::c_char,
+        ...
+    );
+}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct px4_rs_wq_config {
@@ -142,6 +142,9 @@ extern "C" {
 }
 extern "C" {
     pub fn px4_rs_wi_delete(wi: *mut px4_rs_work_item);
+}
+extern "C" {
+    pub fn px4_rs_find_orb_meta(name: *const ::core::ffi::c_char) -> *const orb_metadata;
 }
 extern "C" {
     pub fn px4_rs_sub_cb_new(

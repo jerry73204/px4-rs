@@ -20,10 +20,12 @@
 #include <px4_platform_common/px4_work_queue/WorkQueueManager.hpp>
 #include <uORB/SubscriptionCallback.hpp>
 #include <uORB/uORB.h>
+#include <uORB/topics/uORBTopics.hpp>
 
 #include "wrapper.h"
 
 #include <new>
+#include <cstring>
 #include <cstdlib>
 #include <cstddef>
 
@@ -45,6 +47,32 @@ static_assert(sizeof(px4::wq_config_t) == sizeof(px4_rs_wq_config),
  * grows it past that, our static storage would be too small. */
 static_assert(sizeof(::hrt_call) <= 64,
               "hrt_call grew past 64 bytes — bump Rust's opaque buffer");
+
+/* ------------------------------------------------------------------ */
+/* Canonical metadata lookup                                          */
+/*                                                                    */
+/* PX4 indexes its per-topic DeviceNode table by ORB_ID enum value,   */
+/* so a synthesized orb_metadata with o_id = u16::MAX (all we can do  */
+/* from pure Rust) fails PX4's orb_exists check — listener & friends  */
+/* report "never published" even though the publish went through.     */
+/* This shim lets Rust fetch the canonical metadata pointer for a     */
+/* topic by name, so `UorbTopic::metadata()` can return PX4's real    */
+/* entry with the correct o_id / message_hash / o_queue.              */
+/* ------------------------------------------------------------------ */
+
+extern "C" const struct orb_metadata *px4_rs_find_orb_meta(const char *name) {
+    if (!name) {
+        return nullptr;
+    }
+    const orb_id_size_t invalid = static_cast<orb_id_size_t>(ORB_ID::INVALID);
+    for (orb_id_size_t i = 0; i < invalid; ++i) {
+        const orb_metadata *m = get_orb_meta(static_cast<ORB_ID>(i));
+        if (m && std::strcmp(m->o_name, name) == 0) {
+            return m;
+        }
+    }
+    return nullptr;
+}
 
 /* ------------------------------------------------------------------ */
 /* WorkQueue                                                          */

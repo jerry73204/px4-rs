@@ -96,6 +96,8 @@ fn emit_topic(
         .map(|c| c.value.parse::<TokenStream>().unwrap_or_else(|_| quote!(1)))
         .unwrap_or_else(|| quote!(1));
 
+    let resolved_ident = format_ident!("__ORB_META_{}_RESOLVED", topic_name.to_uppercase());
+
     quote! {
         #[allow(non_camel_case_types)]
         pub struct #topic_ident;
@@ -117,10 +119,37 @@ fn emit_topic(
             }
         );
 
+        /// One-shot cache of the canonical `orb_metadata*` returned by
+        /// `px4_rs_find_orb_meta()` so each publish only pays the
+        /// lookup once.
+        #[allow(non_upper_case_globals)]
+        static #resolved_ident: ::core::sync::atomic::AtomicPtr<::px4_sys::orb_metadata> =
+            ::core::sync::atomic::AtomicPtr::new(::core::ptr::null_mut());
+
         impl ::px4_uorb::UorbTopic for #topic_ident {
             type Msg = #struct_ident;
             fn metadata() -> &'static ::px4_sys::orb_metadata {
-                #meta_ident.get()
+                use ::core::sync::atomic::Ordering;
+                let cached = #resolved_ident.load(Ordering::Acquire);
+                if !cached.is_null() {
+                    // SAFETY: non-null means we stored a canonical
+                    // PX4-static pointer; PX4 never frees those.
+                    return unsafe { &*cached };
+                }
+                // SAFETY: CStr pointer is 'static, PX4's lookup is
+                // read-only and thread-safe.
+                let canonical = unsafe {
+                    ::px4_sys::px4_rs_find_orb_meta(#cname_ident.as_ptr())
+                };
+                if canonical.is_null() {
+                    // Unknown to PX4's compile-time table (e.g. a
+                    // user-introduced topic, or running under the
+                    // host mock). Fall back to the synthesized copy.
+                    return #meta_ident.get();
+                }
+                #resolved_ident.store(canonical as *mut _, Ordering::Release);
+                // SAFETY: canonical points into PX4's static topics table.
+                unsafe { &*canonical }
             }
         }
     }
