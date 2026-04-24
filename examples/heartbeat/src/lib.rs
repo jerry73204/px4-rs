@@ -17,12 +17,13 @@ use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
 
-use px4_log::{info, module};
+use px4_log::{info, module, panic_handler};
 use px4_msg_macros::px4_message;
 use px4_uorb::Publication;
 use px4_workqueue::task;
 
 module!("heartbeat");
+panic_handler!();
 
 #[px4_message("Airspeed.msg")]
 pub struct Airspeed;

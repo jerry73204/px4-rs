@@ -8,9 +8,16 @@ members = [
     "crates/px4-msg-codegen",
     "crates/px4-msg-macros",
     "crates/px4-uorb",
+    "xtask",
+]
+
+# Template modules — intentionally kept out of the workspace so that a
+# user who copies one of these directories gets a standalone, buildable
+# module with no hidden workspace-root coupling. They reference px4-rs
+# via explicit relative paths from within each Cargo.toml.
+exclude = [
     "examples/px4-rust-template",
     "examples/heartbeat",
-    "xtask",
 ]
 
 [workspace.package]

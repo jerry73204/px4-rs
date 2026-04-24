@@ -19,10 +19,6 @@ log     = { workspace = true, optional = true }
 default = []
 # Route `log` crate records through px4_log_modulename. Pulls in `log`.
 log = ["dep:log"]
-# Install a #[panic_handler] that logs and calls abort(). Opt-in because
-# a mixed C++/Rust PX4 module binary may already have one. Not usable
-# alongside the `std` feature.
-panic-handler = []
 # Host mode — log macros write to stderr instead of calling the PX4 FFI.
 # Enables building unit tests without a PX4 link target.
 std = []

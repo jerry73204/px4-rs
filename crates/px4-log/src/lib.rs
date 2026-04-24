@@ -41,13 +41,8 @@ use core::ffi::c_int;
 use core::ffi::{CStr, c_char};
 use core::fmt::{self, Write};
 
-// Only install the #[panic_handler] on bare-metal targets. On hosted
-// targets (linux/macos/windows) the std crate already supplies one,
-// and our `#[panic_handler]` attribute would conflict with it. This
-// lets the `panic-handler` feature be enabled unconditionally in a
-// PX4 module's Cargo.toml without breaking host clippy / tests.
-#[cfg(all(feature = "panic-handler", target_os = "none"))]
-mod panic;
+// Panic handler lives in the user's module crate via the
+// `px4_log::panic_handler!()` macro. See the macro docs below.
 
 #[cfg(feature = "log")]
 mod log_backend;
@@ -138,6 +133,48 @@ pub fn __log_impl(level: Level, module: &CStr, args: fmt::Arguments<'_>) {
             px4_sys::px4_log_modulename(level as c_int, module.as_ptr(), c"%s".as_ptr(), ptr);
         }
     }
+}
+
+/// Install a `#[panic_handler]` in the invoking crate that logs via
+/// `px4_log_modulename(PANIC, …)` and calls libc `abort()`.
+///
+/// Call exactly once at a PX4 Rust module's crate root:
+///
+/// ```ignore
+/// px4_log::panic_handler!();
+/// ```
+///
+/// Why a macro instead of a feature flag on `px4-log`: the
+/// `#[panic_handler]` attribute is global per final binary, and Rust
+/// activates it based on the *containing* crate's cfg. If `px4-log`
+/// itself defined the handler conditionally, any build that pulls
+/// `px4-log` in with the feature on (e.g. `cargo clippy --all-targets`
+/// against a workspace example) would get the handler in contexts
+/// where `std` already provides one, leading to duplicate-lang-item
+/// errors. Scoping the handler to the user's module crate sidesteps
+/// that entirely and matches the real-world contract: exactly one
+/// Rust PX4 module per firmware may install a panic handler.
+#[macro_export]
+macro_rules! panic_handler {
+    () => {
+        // `cargo test` / `cargo clippy --all-targets` compiles a test
+        // harness that pulls in `std`, whose own `#[panic_handler]`
+        // would collide with ours. `cfg_attr(not(test), …)` keeps
+        // the function defined in both cases but only marks it as
+        // THE panic handler when we're not in a test build.
+        #[cfg_attr(not(test), panic_handler)]
+        #[allow(dead_code)]
+        fn __px4_rs_on_panic(info: &::core::panic::PanicInfo<'_>) -> ! {
+            unsafe extern "C" {
+                fn abort() -> !;
+            }
+            let m: &::core::ffi::CStr = c"panic";
+            $crate::__log_impl($crate::Level::Panic, m, ::core::format_args!("{info}"));
+            // SAFETY: libc abort diverges. PX4 links newlib on
+            // NuttX and glibc on POSIX-SITL — both provide it.
+            unsafe { abort() }
+        }
+    };
 }
 
 /// Declare this crate's PX4 module name. Call once at the crate root.

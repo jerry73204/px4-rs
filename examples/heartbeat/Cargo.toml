@@ -10,9 +10,24 @@ crate-type = ["staticlib"]
 doctest    = false
 
 [dependencies]
-px4-log              = { workspace = true, features = ["panic-handler"] }
-px4-sys              = { workspace = true }
-px4-uorb             = { workspace = true }
-px4-workqueue        = { workspace = true }
-px4-workqueue-macros = { workspace = true }
-px4-msg-macros       = { workspace = true }
+# Relative paths from this Cargo.toml. When copied out of the px4-rs
+# tree into your EXTERNAL_MODULES_LOCATION, rewrite these to point at
+# wherever your px4-rs checkout lives (absolute or relative).
+px4-log              = { path = "../../crates/px4-log" }
+px4-sys              = { path = "../../crates/px4-sys" }
+px4-uorb             = { path = "../../crates/px4-uorb" }
+px4-workqueue        = { path = "../../crates/px4-workqueue" }
+px4-workqueue-macros = { path = "../../crates/px4-workqueue-macros" }
+px4-msg-macros       = { path = "../../crates/px4-msg-macros" }
+
+# A staticlib #![no_std] crate that will be linked into a PX4 binary
+# needs panic = "abort" so rustc doesn't require an eh_personality
+# landing-pad symbol from std.
+[profile.release]
+panic     = "abort"
+opt-level = "s"
+lto       = "fat"
+strip     = "symbols"
+
+[profile.dev]
+panic = "abort"

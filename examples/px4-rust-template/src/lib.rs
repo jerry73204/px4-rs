@@ -11,10 +11,11 @@
 
 use core::ffi::{c_char, c_int};
 
-use px4_log::{info, module};
+use px4_log::{info, module, panic_handler};
 use px4_workqueue::task;
 
 module!("px4_rust_template");
+panic_handler!();
 
 #[task(wq = "lp_default")]
 async fn hello() {

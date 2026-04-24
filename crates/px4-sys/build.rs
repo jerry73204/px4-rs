@@ -119,35 +119,96 @@ fn verify_px4_version(px4_dir: &Path) {
 
 /// Compile `wrapper.cpp` against the real PX4 headers. The static_asserts
 /// inside will fail the compile if any struct layout drifted.
+///
+/// Include / define plumbing:
+///
+/// - `PX4_AUTOPILOT_DIR` — PX4 source tree.
+/// - `PX4_RS_BUILD_DIR` — PX4 CMake build dir. Holds the
+///   CMake-generated `px4_boardconfig.h` and the `uORB/topics/*.h`
+///   headers. Set by `px4_rust_module()`.
+/// - `PX4_RS_PLATFORM` — "posix" or "nuttx". Drives
+///   `-D__PX4_POSIX` / `-D__PX4_NUTTX` + the platform-specific
+///   include subtree.
 fn compile_trampolines(crate_dir: &Path, px4_dir: &Path) {
-    let includes = [
+    let platform = env::var("PX4_RS_PLATFORM").unwrap_or_else(|_| "nuttx".to_string());
+    let build_dir = env::var_os("PX4_RS_BUILD_DIR").map(PathBuf::from);
+
+    let common_includes = [
         "platforms/common/include",
         "platforms/common",
         "src",
         "src/lib",
+        "src/lib/matrix",
         "src/include",
         "src/modules",
         "msg",
+    ];
+    let posix_includes = [
+        "platforms/posix/include",
+        "platforms/posix/src/px4/common/include",
+        "platforms/posix/src/px4/generic/generic/include",
+        "boards/px4/sitl/src",
     ];
 
     let mut build = cc::Build::new();
     build
         .cpp(true)
-        .std("c++17")
+        .std("gnu++17")
         .file(crate_dir.join("wrapper.cpp"))
         .include(crate_dir)
         .flag_if_supported("-Wno-unused-parameter")
-        .flag_if_supported("-Wno-address-of-packed-member")
-        .define("__PX4_POSIX", None);
+        .flag_if_supported("-Wno-address-of-packed-member");
 
-    for inc in includes {
+    // Platform-specific preprocessor defines + include subtree.
+    match platform.as_str() {
+        "posix" => {
+            build
+                .define("__PX4_POSIX", None)
+                .define("__PX4_LINUX", None)
+                .define("CONFIG_ARCH_BOARD_PX4_SITL", None)
+                .define("ENABLE_LOCKSTEP_SCHEDULER", None)
+                .define("__STDC_FORMAT_MACROS", None)
+                .define("__CUSTOM_FILE_IO__", None)
+                .define("noreturn_function", "__attribute__((noreturn))")
+                .define("MODULE_NAME", "\"px4_rs_wrapper\"")
+                // PX4's build forcibly includes visibility.h at the
+                // start of every TU; replicate so the __EXPORT /
+                // __BEGIN_DECLS macros resolve.
+                .flag("-includevisibility.h");
+            for inc in posix_includes {
+                let p = px4_dir.join(inc);
+                if p.is_dir() {
+                    build.include(p);
+                }
+            }
+        }
+        _ => {
+            build
+                .define("__PX4_NUTTX", None)
+                .define("MODULE_NAME", "\"px4_rs_wrapper\"")
+                .flag("-includevisibility.h");
+        }
+    }
+
+    for inc in common_includes {
         let p = px4_dir.join(inc);
         if p.is_dir() {
             build.include(p);
         }
     }
 
-    // If any of the headers we include change under the PX4 tree, rebuild.
+    // The CMake build dir holds px4_boardconfig.h and the generated
+    // uORB/topics/*.h headers. Without it, wrapper.cpp can't include
+    // px4_platform_common/defines.h.
+    if let Some(bd) = &build_dir {
+        build.include(bd);
+        build.include(bd.join("src").join("lib"));
+    } else {
+        println!(
+            "cargo:warning=PX4_RS_BUILD_DIR unset — wrapper.cpp will likely fail to find px4_boardconfig.h"
+        );
+    }
+
     for rel in [
         "platforms/common/uORB/uORB.h",
         "platforms/common/uORB/SubscriptionCallback.hpp",
@@ -158,6 +219,8 @@ fn compile_trampolines(crate_dir: &Path, px4_dir: &Path) {
     ] {
         println!("cargo:rerun-if-changed={}", px4_dir.join(rel).display());
     }
+    println!("cargo:rerun-if-env-changed=PX4_RS_PLATFORM");
+    println!("cargo:rerun-if-env-changed=PX4_RS_BUILD_DIR");
 
     build.compile("px4_rs_wrapper");
 }

@@ -59,15 +59,21 @@ function(px4_rust_module)
         message(FATAL_ERROR
             "px4_rust_module: MANIFEST not found: ${ARG_MANIFEST}")
     endif()
-    if(NOT DEFINED ENV{PX4_AUTOPILOT_DIR} AND NOT DEFINED PX4_AUTOPILOT_DIR)
-        # PX4 itself defines PX4_SOURCE_DIR. Fall back to that.
-        if(DEFINED PX4_SOURCE_DIR)
-            set(ENV{PX4_AUTOPILOT_DIR} "${PX4_SOURCE_DIR}")
-        else()
-            message(WARNING
-                "px4_rust_module: PX4_AUTOPILOT_DIR is unset; "
-                "px4-sys will not compile its C++ trampolines")
-        endif()
+    # Resolve a PX4 source tree. PX4's top-level CMakeLists.txt always
+    # sets PX4_SOURCE_DIR, so that's our primary source; fall back to
+    # the PX4_AUTOPILOT_DIR env var if someone invoked us from a
+    # different harness.
+    if(DEFINED PX4_SOURCE_DIR)
+        set(_px4_src "${PX4_SOURCE_DIR}")
+    elseif(DEFINED ENV{PX4_AUTOPILOT_DIR})
+        set(_px4_src "$ENV{PX4_AUTOPILOT_DIR}")
+    elseif(DEFINED PX4_AUTOPILOT_DIR)
+        set(_px4_src "${PX4_AUTOPILOT_DIR}")
+    else()
+        message(FATAL_ERROR
+            "px4_rust_module: neither PX4_SOURCE_DIR nor "
+            "PX4_AUTOPILOT_DIR is defined; cannot locate PX4 headers "
+            "for the C++ trampoline compile.")
     endif()
 
     if(NOT ARG_ENTRY)
@@ -77,10 +83,27 @@ function(px4_rust_module)
     if(NOT ARG_TARGET)
         _px4_rust_default_target(ARG_TARGET)
         if(NOT ARG_TARGET)
-            message(FATAL_ERROR
-                "px4_rust_module: cannot derive Rust target triple "
-                "from this PX4 board; pass TARGET explicitly")
+            # SITL / POSIX builds end up here — no CONFIG_ARCH_CHIP_*.
+            # Fall back to the host triple.
+            if(DEFINED CONFIG_ARCH_BOARD_PX4_SITL OR DEFINED PX4_CONFIG AND PX4_CONFIG MATCHES "sitl")
+                set(ARG_TARGET "${CMAKE_HOST_SYSTEM_PROCESSOR}-unknown-linux-gnu")
+                if(CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "x86_64")
+                    set(ARG_TARGET "x86_64-unknown-linux-gnu")
+                endif()
+            else()
+                message(FATAL_ERROR
+                    "px4_rust_module: cannot derive Rust target triple "
+                    "from this PX4 board; pass TARGET explicitly")
+            endif()
         endif()
+    endif()
+
+    # Classify the platform so px4-sys's build.rs can pick the right
+    # include subtree + preprocessor defines.
+    if(DEFINED CONFIG_ARCH_BOARD_PX4_SITL OR PX4_CONFIG MATCHES "sitl")
+        set(_px4_rs_platform "posix")
+    else()
+        set(_px4_rs_platform "nuttx")
     endif()
 
     # Per-module CARGO_TARGET_DIR keeps concurrent module builds from
@@ -99,7 +122,10 @@ function(px4_rust_module)
     add_custom_command(
         OUTPUT  "${_staticlib}"
         COMMAND ${CMAKE_COMMAND} -E env
+                "PX4_AUTOPILOT_DIR=${_px4_src}"
                 "PX4_RS_BUILD_TRAMPOLINES=1"
+                "PX4_RS_BUILD_DIR=${CMAKE_BINARY_DIR}"
+                "PX4_RS_PLATFORM=${_px4_rs_platform}"
                 "CARGO_TARGET_DIR=${_cargo_target_dir}"
                 cargo build
                     --release

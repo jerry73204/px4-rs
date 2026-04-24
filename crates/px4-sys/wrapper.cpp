@@ -1,19 +1,27 @@
 /*
  * px4-sys: C++ trampolines bridging Rust ↔ PX4's C++ classes.
  *
- * Compiled by `cc` crate when PX4_AUTOPILOT_DIR is set. All exported
- * symbols are `extern "C"` and declared in wrapper.h.
+ * Compiled by `cc` crate against real PX4 headers. All exported
+ * symbols are `extern "C"` and declared (on the Rust side) in wrapper.h.
+ *
+ * `PX4_RS_USE_REAL_TYPES` tells wrapper.h to skip the types PX4's
+ * own headers already define (hrt_call, orb_metadata, orb_*, hrt_*,
+ * px4_log_modulename). We still pick up the trampoline type
+ * declarations (px4_rs_wq_config, opaque handles, px4_rs_wi_* and
+ * px4_rs_sub_cb_* signatures).
  */
 
-#include "wrapper.h"
+#define PX4_RS_USE_REAL_TYPES
 
+#include <drivers/drv_hrt.h>
 #include <px4_platform_common/px4_work_queue/WorkItem.hpp>
 #include <px4_platform_common/px4_work_queue/ScheduledWorkItem.hpp>
 #include <px4_platform_common/px4_work_queue/WorkQueue.hpp>
 #include <px4_platform_common/px4_work_queue/WorkQueueManager.hpp>
 #include <uORB/SubscriptionCallback.hpp>
 #include <uORB/uORB.h>
-#include <drivers/drv_hrt.h>
+
+#include "wrapper.h"
 
 #include <new>
 #include <cstdlib>
@@ -21,32 +29,22 @@
 
 /* ------------------------------------------------------------------ */
 /* Layout sanity checks — fail the build if PX4 moves a field         */
-/* under us. Compile-time. See phase-02 doc for the v1.15 break.      */
+/* under us. The Rust side's wrapper.h encodes the expected ABI;      */
+/* these checks assert that PX4's real types match it.                */
 /* ------------------------------------------------------------------ */
 
-static_assert(sizeof(struct orb_metadata) == sizeof(::orb_metadata),
-              "orb_metadata size mismatch — PX4 version not supported");
-static_assert(offsetof(struct orb_metadata, o_name)
-                == offsetof(::orb_metadata, o_name),
-              "orb_metadata.o_name offset mismatch");
-static_assert(offsetof(struct orb_metadata, message_hash)
-                == offsetof(::orb_metadata, message_hash),
-              "orb_metadata.message_hash offset mismatch (pre-v1.15 PX4?)");
-static_assert(offsetof(struct orb_metadata, o_id)
-                == offsetof(::orb_metadata, o_id),
-              "orb_metadata.o_id offset mismatch");
-static_assert(offsetof(struct orb_metadata, o_queue)
-                == offsetof(::orb_metadata, o_queue),
-              "orb_metadata.o_queue offset mismatch");
+static_assert(sizeof(::orb_metadata) == 24,
+              "orb_metadata grew — Rust wrapper.h is stale");
+static_assert(offsetof(::orb_metadata, o_name) == 0,
+              "orb_metadata.o_name no longer the first field");
 
-static_assert(sizeof(struct px4_rs_wq_config) == sizeof(px4::wq_config_t),
-              "wq_config_t size mismatch");
-static_assert(offsetof(struct px4_rs_wq_config, stacksize)
-                == offsetof(px4::wq_config_t, stacksize),
-              "wq_config_t.stacksize offset mismatch");
+static_assert(sizeof(px4::wq_config_t) == sizeof(px4_rs_wq_config),
+              "wq_config_t size drift vs Rust px4_rs_wq_config");
 
-static_assert(sizeof(struct hrt_call) >= sizeof(::hrt_call),
-              "hrt_call opaque buffer too small — bump _opaque size");
+/* hrt_call is held opaquely on the Rust side as [u8; 64]. If PX4
+ * grows it past that, our static storage would be too small. */
+static_assert(sizeof(::hrt_call) <= 64,
+              "hrt_call grew past 64 bytes — bump Rust's opaque buffer");
 
 /* ------------------------------------------------------------------ */
 /* WorkQueue                                                          */

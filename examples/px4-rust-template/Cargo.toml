@@ -10,6 +10,16 @@ crate-type = ["staticlib"]
 doctest    = false
 
 [dependencies]
-px4-log              = { workspace = true, features = ["panic-handler"] }
-px4-workqueue        = { workspace = true }
-px4-workqueue-macros = { workspace = true }
+# Relative paths from this Cargo.toml; rewrite after copy-out.
+px4-log              = { path = "../../crates/px4-log" }
+px4-workqueue        = { path = "../../crates/px4-workqueue" }
+px4-workqueue-macros = { path = "../../crates/px4-workqueue-macros" }
+
+[profile.release]
+panic     = "abort"
+opt-level = "s"
+lto       = "fat"
+strip     = "symbols"
+
+[profile.dev]
+panic = "abort"

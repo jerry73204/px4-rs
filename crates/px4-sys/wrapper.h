@@ -1,11 +1,11 @@
 /*
  * px4-sys: audited FFI surface for PX4 Autopilot.
  *
- * This header is consumed by bindgen and by our own C++ trampolines. It
- * intentionally does NOT pull in any PX4 headers — the declarations here
- * are hand-authored to match the PX4 ABI for v1.15+ (see phase-02 doc).
- * Struct layouts are verified at compile time in wrapper.cpp via
- * static_assert against the real PX4 headers.
+ * This header is consumed both by bindgen (host) and by our own C++
+ * trampoline compile (target, against real PX4 headers). When compiled
+ * from `wrapper.cpp` — which already has PX4's real `orb_metadata`,
+ * `hrt_call`, etc. in scope — callers define `PX4_RS_USE_REAL_TYPES`
+ * first so we don't redeclare the shared types.
  */
 
 #ifndef PX4_RS_WRAPPER_H
@@ -18,6 +18,8 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#ifndef PX4_RS_USE_REAL_TYPES
 
 /* ------------------------------------------------------------------ */
 /* drv_hrt.h                                                          */
@@ -37,18 +39,6 @@ void        hrt_call_every(struct hrt_call *entry,
                            void (*callout)(void *),
                            void *arg);
 void        hrt_cancel(struct hrt_call *entry);
-
-/* ------------------------------------------------------------------ */
-/* px4_platform_common/log.h                                          */
-/* ------------------------------------------------------------------ */
-
-#define PX4_RS_LOG_LEVEL_DEBUG 0
-#define PX4_RS_LOG_LEVEL_INFO  1
-#define PX4_RS_LOG_LEVEL_WARN  2
-#define PX4_RS_LOG_LEVEL_ERROR 3
-#define PX4_RS_LOG_LEVEL_PANIC 4
-
-void px4_log_modulename(int level, const char *module_name, const char *fmt, ...);
 
 /* ------------------------------------------------------------------ */
 /* uORB/uORB.h — v1.15+ ABI                                           */
@@ -80,6 +70,20 @@ int          orb_unsubscribe(int handle);
 int          orb_copy(const struct orb_metadata *meta, int handle, void *buffer);
 int          orb_check(int handle, bool *updated);
 int          orb_exists(const struct orb_metadata *meta, int instance);
+
+/* ------------------------------------------------------------------ */
+/* px4_platform_common/log.h                                          */
+/* ------------------------------------------------------------------ */
+
+void px4_log_modulename(int level, const char *module_name, const char *fmt, ...);
+
+#endif /* !PX4_RS_USE_REAL_TYPES */
+
+#define PX4_RS_LOG_LEVEL_DEBUG 0
+#define PX4_RS_LOG_LEVEL_INFO  1
+#define PX4_RS_LOG_LEVEL_WARN  2
+#define PX4_RS_LOG_LEVEL_ERROR 3
+#define PX4_RS_LOG_LEVEL_PANIC 4
 
 /* ------------------------------------------------------------------ */
 /* WorkQueue — px4::wq_config_t and extern "C" trampolines            */
