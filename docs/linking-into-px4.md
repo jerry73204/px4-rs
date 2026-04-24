@@ -16,38 +16,123 @@ Two reference modules under `examples/` show the full layout end-to-end:
 
 ## Approach 1 — `EXTERNAL_MODULES_LOCATION` (recommended)
 
-1. Add to your PX4 board config (`boards/.../default.px4board` or a
-   downstream `CMakeLists.txt`):
+Full walkthrough, starting from a PX4 fork you've already been
+working in. Five files touched total.
 
-   ```cmake
-   set(EXTERNAL_MODULES_LOCATION "/path/to/your/px4_rust_modules")
-   list(APPEND CONFIG_SHELL_CMDS "heartbeat start")
-   ```
+### Step 1 — get px4-rs
 
-2. Inside `/path/to/your/px4_rust_modules/heartbeat/CMakeLists.txt`:
+```sh
+git clone https://github.com/aeon/px4-rs.git ~/src/px4-rs
+# …or add it as a submodule of your PX4 fork, whichever you prefer.
+```
 
-   ```cmake
-   set(PX4_RS_DIR /path/to/px4-rs)            # absolute or relative
-   include(${PX4_RS_DIR}/cmake/px4-rust.cmake)
+### Step 2 — lay out the external-modules directory
 
-   px4_rust_module(
-       NAME     heartbeat
-       CRATE    heartbeat                       # Cargo package name
-       MANIFEST ${CMAKE_CURRENT_LIST_DIR}/Cargo.toml
-       # Optional:
-       # ENTRY  heartbeat_main                  # default: ${CRATE}_main
-       # TARGET thumbv7em-none-eabihf           # default: derived from board
-   )
-   ```
+PX4 expects a directory with a `src/` subtree:
 
-3. Build PX4 normally:
+```
+~/my-externals/
+    src/
+        CMakeLists.txt            # step 4
+        modules/
+            heartbeat/            # step 3 — one dir per Rust module
+                Cargo.toml
+                CMakeLists.txt
+                Kconfig
+                rust-toolchain.toml
+                src/lib.rs
+                Airspeed.msg      # if the module uses #[px4_message]
+```
 
-   ```sh
-   make px4_fmu-v6x_default
-   ```
+### Step 3 — copy the example and edit four things
 
-   The rule invokes `cargo build --release --target <triple>` with
-   `PX4_AUTOPILOT_DIR=<px4 source>` and `PX4_RS_BUILD_TRAMPOLINES=1`
+```sh
+cp -r ~/src/px4-rs/examples/heartbeat \
+      ~/my-externals/src/modules/heartbeat
+```
+
+Then edit the module's `Cargo.toml` to replace the `workspace = true`
+dependency entries with explicit paths into your px4-rs checkout:
+
+```diff
+ [dependencies]
+-px4-log              = { workspace = true, features = ["panic-handler"] }
+-px4-sys              = { workspace = true }
+-px4-uorb             = { workspace = true }
+-px4-workqueue        = { workspace = true }
+-px4-workqueue-macros = { workspace = true }
+-px4-msg-macros       = { workspace = true }
++px4-log              = { path = "/home/you/src/px4-rs/crates/px4-log", features = ["panic-handler"] }
++px4-sys              = { path = "/home/you/src/px4-rs/crates/px4-sys" }
++px4-uorb             = { path = "/home/you/src/px4-rs/crates/px4-uorb" }
++px4-workqueue        = { path = "/home/you/src/px4-rs/crates/px4-workqueue" }
++px4-workqueue-macros = { path = "/home/you/src/px4-rs/crates/px4-workqueue-macros" }
++px4-msg-macros       = { path = "/home/you/src/px4-rs/crates/px4-msg-macros" }
+```
+
+Copy `rust-toolchain.toml` in too — the examples need nightly for the
+`type_alias_impl_trait` feature used by the `#[task]` macro:
+
+```sh
+cp ~/src/px4-rs/rust-toolchain.toml \
+   ~/my-externals/src/modules/heartbeat/rust-toolchain.toml
+```
+
+Finally, edit the module's `CMakeLists.txt` to point `PX4_RS_DIR` at
+the cloned px4-rs location:
+
+```cmake
+set(PX4_RS_DIR /home/you/src/px4-rs)
+include(${PX4_RS_DIR}/cmake/px4-rust.cmake)
+
+px4_rust_module(
+    NAME     heartbeat                          # shell command name
+    CRATE    heartbeat                          # Cargo package name
+    MANIFEST ${CMAKE_CURRENT_LIST_DIR}/Cargo.toml
+    # Optional:
+    # ENTRY  some_other_symbol                  # default: ${CRATE}_main
+    # TARGET thumbv7em-none-eabihf              # default: derived from board
+)
+```
+
+### Step 4 — write the parent `src/CMakeLists.txt`
+
+PX4 looks for `${EXTERNAL_MODULES_LOCATION}/src/CMakeLists.txt` and
+reads `config_module_list_external` out of it:
+
+```cmake
+set(config_module_list_external
+    modules/heartbeat
+    PARENT_SCOPE
+)
+```
+
+### Step 5 — wire it into your board
+
+In your PX4 fork's board config (e.g.
+`boards/px4/fmu-v6x/default.px4board`, or your custom board):
+
+```cmake
+set(EXTERNAL_MODULES_LOCATION "/home/you/my-externals")
+list(APPEND CONFIG_SHELL_CMDS "heartbeat start")
+```
+
+Also enable the module in Kconfig:
+
+```sh
+make px4_fmu-v6x_default boardguiconfig
+# navigate to "External Modules" and enable heartbeat (MODULES_HEARTBEAT=y)
+```
+
+### Step 6 — build
+
+```sh
+make px4_fmu-v6x_default
+```
+
+The `px4_rust_module()` rule invokes `cargo build --release --target
+<triple>` with `PX4_AUTOPILOT_DIR=<px4 source>` and
+`PX4_RS_BUILD_TRAMPOLINES=1`
    so `px4-sys` compiles its C++ trampolines against the live PX4
    headers, then links the resulting `libheartbeat.a` into the
    module target.
