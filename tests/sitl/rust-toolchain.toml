@@ -1,0 +1,8 @@
+[toolchain]
+channel = "nightly-2025-10-01"
+components = ["rustfmt", "clippy", "rust-src"]
+targets = [
+    "thumbv7em-none-eabihf",   # Pixhawk / STM32F7
+    "thumbv8m.main-none-eabihf", # STM32H7 cortex-M7
+    "riscv32imc-unknown-none-elf",
+]

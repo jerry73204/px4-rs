@@ -15,9 +15,15 @@ members = [
 # user who copies one of these directories gets a standalone, buildable
 # module with no hidden workspace-root coupling. They reference px4-rs
 # via explicit relative paths from within each Cargo.toml.
+#
+# tests/sitl/ is similarly standalone: it owns its own nightly +
+# nextest config, pulls in std-only deps, and includes PX4 modules
+# whose `panic_handler!()` would collide with `std`'s if they were
+# workspace members.
 exclude = [
     "examples/px4-rust-template",
     "examples/heartbeat",
+    "tests/sitl",
 ]
 
 [workspace.package]

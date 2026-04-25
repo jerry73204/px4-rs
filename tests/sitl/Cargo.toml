@@ -1,0 +1,24 @@
+[package]
+name        = "px4-sitl-tests"
+version     = "0.1.0"
+edition     = "2024"
+publish     = false
+description = "End-to-end tests that drive PX4 SITL with Rust modules linked in."
+
+[lib]
+doctest = false
+
+[dependencies]
+# Fixture framework with #[fixture] / #[rstest] macros + parametrised tests.
+rstest    = "0.24"
+# Stable subprocess error type for the Px4Sitl fixture.
+thiserror = "2.0"
+# Regex-based log-line waits.
+regex     = "1.10"
+
+[dev-dependencies]
+# Integration tests in tests/*.rs only need what the lib exports.
+
+# Tests must run serially under nextest's `sitl` group; see
+# .config/nextest.toml. Plain `cargo test` will still run them in
+# parallel and break — use `cargo nextest run` (or `just test-sitl`).

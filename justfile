@@ -68,6 +68,16 @@ build-target TARGET:
 test:
     cargo test --workspace --all-targets
 
+# End-to-end SITL tests (boots `px4` as a subprocess, drives the
+# daemon with shell commands). Runs serially via nextest's `sitl`
+# test-group; each test is isolated with its own daemon.
+#
+# Requires: PX4_AUTOPILOT_DIR set, gcc/g++ for the cc-crate compile
+# of px4-sys/wrapper.cpp, and `cargo nextest` installed (cargo
+# install cargo-nextest --locked).
+test-sitl:
+    cd tests/sitl && cargo nextest run
+
 # ---------------------------------------------------------------------------
 # Docs
 # ---------------------------------------------------------------------------

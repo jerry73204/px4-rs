@@ -129,9 +129,11 @@ tails the daemon's stderr until a regex hits or timeout.
 
 ## Work items
 
-- [ ] 11.1 — `tests/sitl/` workspace skeleton: `Cargo.toml`,
-      `rust-toolchain.toml`, `.config/nextest.toml` (serial group:
-      `[[test-groups]] sitl = { max-threads = 1 }`)
+- [x] 11.1 — `tests/sitl/` workspace skeleton: standalone `Cargo.toml`,
+      `rust-toolchain.toml`, `.config/nextest.toml` with
+      `[test-groups] sitl = { max-threads = 1 }`. Skeleton lib defines
+      `TestError` / `Result` / `skip!`. `just test-sitl` recipe.
+      Excluded from the main workspace via `[workspace] exclude`.
 - [ ] 11.2 — `Px4Sitl` fixture: `boot()` (cached `make px4_sitl`,
       spawn `./bin/px4 -d etc/init.d-posix/rcS`, wait for `Startup
       script returned`), `shell(cmd)`, RAII `Drop` (SIGTERM → wait →
