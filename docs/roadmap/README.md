@@ -14,5 +14,6 @@ complete; move finished phases to `archived/`.
 | 06 | `px4-uorb` typed pub/sub | Complete (single-instance) |
 | 07 | CMake integration + first end-to-end module on Pixhawk | Infra complete; firmware-build untested |
 | 08 | Examples (hello_module, gyro_watch, multi_task) | Not Started |
-| 09 | Host-side mock + unit tests | Not Started |
+| 09 | Host-side mock + unit tests | Substantially landed via 04/06 mocks |
 | 10 | Documentation polish + crates.io publish | Not Started |
+| 11 | SITL end-to-end test infrastructure | Not Started |
