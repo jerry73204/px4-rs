@@ -16,6 +16,10 @@ thiserror = "2.0"
 # Regex-based log-line waits.
 regex     = "1.10"
 
+[target.'cfg(unix)'.dependencies]
+# setpgid + SIGTERM/SIGKILL to clean up the daemon's whole process tree.
+libc = "0.2"
+
 [dev-dependencies]
 # Integration tests in tests/*.rs only need what the lib exports.
 

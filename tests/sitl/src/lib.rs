@@ -21,15 +21,44 @@
 //! than failing.
 
 pub mod fixtures;
+pub mod process;
 
-/// Skip the current test with a reason. Borrowed from `nros-tests`.
+pub use fixtures::Px4Sitl;
+
+/// Soft-skip the current test with a reason.
 ///
-/// Panics with a `[SKIPPED]` prefix so CI tooling and human readers
-/// can distinguish "prerequisite missing" from "actual regression".
+/// Prints `[SKIPPED] <reason>` to stderr and returns from the
+/// containing function. Use it inside the test body itself — calling
+/// it from a helper function would only return from the helper.
+///
+/// The test reports as PASS so CI runs stay green when prerequisites
+/// (e.g. `PX4_AUTOPILOT_DIR`) are missing; the skip line still shows
+/// up in the output for humans.
 #[macro_export]
 macro_rules! skip {
-    ($($arg:tt)*) => {
-        panic!("[SKIPPED] {}", format_args!($($arg)*))
+    ($($arg:tt)*) => {{
+        ::std::eprintln!("[SKIPPED] {}", ::std::format_args!($($arg)*));
+        return;
+    }};
+}
+
+/// Shorthand for the standard SITL precondition check. Place at the
+/// top of every test that needs a real PX4 checkout:
+///
+/// ```ignore
+/// #[test]
+/// fn my_sitl_test() {
+///     ensure_px4!();
+///     let sitl = Px4Sitl::boot()?;
+///     // ...
+/// }
+/// ```
+#[macro_export]
+macro_rules! ensure_px4 {
+    () => {
+        if $crate::fixtures::px4_source_dir().is_err() {
+            $crate::skip!("PX4_AUTOPILOT_DIR not set or missing");
+        }
     };
 }
 

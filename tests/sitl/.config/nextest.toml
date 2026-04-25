@@ -2,11 +2,11 @@
 #
 # Every test in this crate boots its own `px4` daemon, which binds the
 # usual MAVLink UDP ports (14540, 14550, …). Two daemons can't coexist
-# on those ports, so SITL tests must run serially. Other crates'
-# unit tests in the workspace are unaffected.
+# on those ports, so SITL tests must run serially. The whole crate is
+# in the `sitl` test-group; nextest caps that group at one thread.
 
 [[profile.default.overrides]]
-filter      = "package(px4-sitl-tests) and binary_id(/px4-sitl-tests::test::.+/)"
+filter      = "package(px4-sitl-tests)"
 test-group  = "sitl"
 
 [test-groups]
@@ -16,6 +16,6 @@ sitl = { max-threads = 1 }
 # typically takes 3–5 seconds; allow generous slack for the cold first
 # boot that triggers the cached PX4 build.
 [profile.default]
-slow-timeout      = { period = "30s", terminate-after = 4 }
-status-level      = "pass"
+slow-timeout       = { period = "30s", terminate-after = 4 }
+status-level       = "pass"
 final-status-level = "slow"

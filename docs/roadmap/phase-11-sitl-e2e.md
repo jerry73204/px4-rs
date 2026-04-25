@@ -134,10 +134,15 @@ tails the daemon's stderr until a regex hits or timeout.
       `[test-groups] sitl = { max-threads = 1 }`. Skeleton lib defines
       `TestError` / `Result` / `skip!`. `just test-sitl` recipe.
       Excluded from the main workspace via `[workspace] exclude`.
-- [ ] 11.2 — `Px4Sitl` fixture: `boot()` (cached `make px4_sitl`,
-      spawn `./bin/px4 -d etc/init.d-posix/rcS`, wait for `Startup
-      script returned`), `shell(cmd)`, RAII `Drop` (SIGTERM → wait →
-      SIGKILL with 5s grace)
+- [x] 11.2 — `Px4Sitl` fixture: `boot()` runs cached `make px4_sitl`
+      (`OnceLock`), spawns `./bin/px4 -d etc/init.d-posix/rcS` in its
+      own process group, drains stdout+stderr into a shared
+      `Mutex<String>` log buffer, blocks on a `Condvar` until the
+      `Startup script returned successfully` line appears. `shell(cmd)`
+      execs `./bin/px4-<modname>` with the rest as args. `Drop` SIGTERMs
+      the process group, waits 3s, then SIGKILLs. Three smoke tests in
+      `tests/boot.rs` cover the boot + shell + wait_for_log paths and
+      pass against PX4 v1.16.2 SITL in <1s each (warm cache).
 - [ ] 11.3 — `wait_for_log(pattern, timeout)` helper that streams the
       daemon's stderr through a `BufReader`
 - [ ] 11.4 — `skip!` macro + `PX4_AUTOPILOT_DIR` precondition check
