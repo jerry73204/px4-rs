@@ -1,0 +1,7 @@
+menuconfig MODULES_E2E_SMOKE
+	bool "e2e_smoke (px4-rs phase-11 smoke test)"
+	default y
+	---help---
+		Phase-11 SITL test module. Spawns one task that publishes
+		Airspeed in a tight loop. Pulled in only by the
+		tests/sitl/ external-modules tree.

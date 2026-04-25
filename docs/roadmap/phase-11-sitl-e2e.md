@@ -147,8 +147,13 @@ tails the daemon's stderr until a regex hits or timeout.
       daemon's stderr through a `BufReader`
 - [ ] 11.4 — `skip!` macro + `PX4_AUTOPILOT_DIR` precondition check
       so the suite degrades gracefully when run without PX4
-- [ ] 11.5 — `px4-externals/` tree with `e2e_smoke` module (smallest
-      possible: spawns one task that publishes on `airspeed`)
+- [x] 11.5 — `px4-externals/src/modules/e2e_smoke/` ships a minimal
+      Rust PX4 module: one `#[task]` on `lp_default` that publishes
+      Airspeed in a tight loop with `yield_now`. Wired into
+      `config_module_list_external`. Standalone `cargo build` and
+      full `make px4_sitl` both succeed; the resulting daemon
+      registers `airspeed` (2 subscribers — airspeed_selector +
+      airspeed_validated pick it up) when `e2e_smoke start` is run.
 - [ ] 11.6 — First test (`tests/smoke.rs::heartbeat_publishes`)
       reproducing the manual SITL bring-up we did
 - [ ] 11.7 — `e2e_pubsub_pub` + `e2e_pubsub_sub` modules + a test
