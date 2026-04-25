@@ -143,10 +143,14 @@ tails the daemon's stderr until a regex hits or timeout.
       the process group, waits 3s, then SIGKILLs. Three smoke tests in
       `tests/boot.rs` cover the boot + shell + wait_for_log paths and
       pass against PX4 v1.16.2 SITL in <1s each (warm cache).
-- [ ] 11.3 — `wait_for_log(pattern, timeout)` helper that streams the
-      daemon's stderr through a `BufReader`
-- [ ] 11.4 — `skip!` macro + `PX4_AUTOPILOT_DIR` precondition check
-      so the suite degrades gracefully when run without PX4
+- [ ] 11.3 — `wait_for_log` regex upgrade. Substring version is in
+      `Px4Sitl::wait_for_log` already; the regex form is a follow-up
+      once a test actually needs pattern groups.
+- [x] 11.4 — `skip!` macro emits `[SKIPPED] <reason>` to stderr and
+      returns; `ensure_px4!()` shorthand checks `PX4_AUTOPILOT_DIR`
+      and short-circuits the test. Verified: `cargo nextest run`
+      without the env var reports 3 PASS in 5ms with skip lines on
+      stderr.
 - [x] 11.5 — `px4-externals/src/modules/e2e_smoke/` ships a minimal
       Rust PX4 module: one `#[task]` on `lp_default` that publishes
       Airspeed in a tight loop with `yield_now`. Wired into
@@ -154,8 +158,15 @@ tails the daemon's stderr until a regex hits or timeout.
       full `make px4_sitl` both succeed; the resulting daemon
       registers `airspeed` (2 subscribers — airspeed_selector +
       airspeed_validated pick it up) when `e2e_smoke start` is run.
-- [ ] 11.6 — First test (`tests/smoke.rs::heartbeat_publishes`)
-      reproducing the manual SITL bring-up we did
+- [x] 11.6 — `tests/smoke.rs` reproduces the manual SITL bring-up
+      across three tests: `e2e_smoke_starts_and_logs` waits for the
+      `#[task]` body's banner in the daemon log;
+      `airspeed_topic_appears_in_uorb_status` parses the `uorb status`
+      table and asserts ≥1 subscriber on `airspeed`;
+      `listener_airspeed_reads_back_rust_publish` asserts PX4's stock
+      `listener` tool reads the Rust-published payload through the
+      canonical-orb_metadata path (`confidence: 1.00000` round-trips).
+      Full SITL suite (6 tests) runs in ~12s warm.
 - [ ] 11.7 — `e2e_pubsub_pub` + `e2e_pubsub_sub` modules + a test
       that verifies they exchange data (covers Subscription path)
 - [ ] 11.8 — `e2e_panic` module + a test that the daemon logs
