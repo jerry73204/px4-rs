@@ -201,6 +201,27 @@ doesn't need them, but some `crates.io` dependencies do — audit
 before pulling them in. Prefer `core`-only crates and explicit
 `#![no_std]`.
 
+## End-to-end regression suite
+
+Once `px4-rs` is wired into a PX4 build, the canonical "does this still
+work?" answer lives in [`tests/sitl/`](../tests/sitl/) — a standalone
+test crate that boots `px4` SITL with a handful of small Rust modules
+linked in and drives them via PX4's stock shell tooling. It exercises
+every layer the manual smoke test below covers, plus the runtime: the
+`#[task]` spawn, `Publication`, `Subscription`, `panic_handler!()`,
+and multi-WorkQueue scheduling each get one dedicated test.
+
+```sh
+PX4_AUTOPILOT_DIR=$HOME/repos/PX4-Autopilot just test-sitl
+```
+
+The recipe runs `cargo nextest run` inside `tests/sitl/`. First run
+takes about a minute (cold `make px4_sitl`); subsequent runs reuse
+the cached PX4 build and finish in under 30 seconds. Without
+`PX4_AUTOPILOT_DIR`, every test reports `[SKIPPED]` and exits clean,
+so the suite is safe to invoke from CI runners that don't have a
+PX4 checkout.
+
 ## Manual smoke test
 
 Before a real PX4 build, verify the staticlib compiles on the host:

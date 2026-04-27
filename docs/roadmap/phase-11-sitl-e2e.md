@@ -6,7 +6,7 @@ drives the live `px4` daemon, and asserts on what comes back through
 uORB. Catches the entire integration stack — codegen, cargo build,
 wrapper.cpp compile, PX4 link, runtime — in one place.
 
-**Status**: Not Started
+**Status**: Done — 9 tests pass under `cargo nextest run` in ~27s warm.
 **Priority**: P0 (every later phase change risks silently breaking the
 SITL bring-up that we hand-validated end-to-end)
 **Depends on**: Phase 02, Phase 04, Phase 06, Phase 07
@@ -167,27 +167,46 @@ tails the daemon's stderr until a regex hits or timeout.
       `listener` tool reads the Rust-published payload through the
       canonical-orb_metadata path (`confidence: 1.00000` round-trips).
       Full SITL suite (6 tests) runs in ~12s warm.
-- [ ] 11.7 — `e2e_pubsub_pub` + `e2e_pubsub_sub` modules + a test
-      that verifies they exchange data (covers Subscription path)
-- [ ] 11.8 — `e2e_panic` module + a test that the daemon logs
-      `[heartbeat] panic` and exits non-zero when commanded to panic
-- [ ] 11.9 — `e2e_multi_wq` module with two tasks on different WQs +
-      a test that both run independently
-- [ ] 11.10 — `just test-sitl` recipe + section in
-      `docs/linking-into-px4.md` pointing at the test crate as the
-      canonical "does this still work?" answer
+- [x] 11.7 — `e2e_pubsub_pub` + `e2e_pubsub_sub` modules + a test
+      that verifies they exchange data (covers Subscription path).
+      The two staticlibs each carry their own per-crate
+      `__ORB_META_E2E_PUBSUB` static; PX4's broker rejects two
+      different metadata pointers for the same topic name, so the
+      test crate ships an external `msg/E2ePubsub.msg` (+ a tiny
+      `msg/CMakeLists.txt` setting `config_msg_list_external`).
+      That makes PX4 codegen canonical metadata; both crates'
+      `metadata()` then resolve through `px4_rs_find_orb_meta` to
+      the same pointer and the broker is happy. Confirms the
+      `Subscription` path delivers (test asserts a `got counter=10`
+      log line from the subscriber after the publisher starts).
+- [x] 11.8 — `e2e_panic` module + a test (`tests/panic.rs`) that
+      asserts the panic body lands in the daemon log via
+      `panic_handler!()` and the daemon exits non-zero. Required a
+      new `Px4Sitl::wait_for_exit(timeout)` helper since every other
+      test relies on `Drop` to kill the daemon. Covers the
+      `panic_handler!()` install path end-to-end.
+- [x] 11.9 — `e2e_multi_wq` module with one `#[task]` on
+      `lp_default` and one on `hp_default`. `tests/multi_wq.rs`
+      asserts both tasks reach their banner; if `#[task(wq = …)]`
+      were silently routing everything to a single WQ thread, only
+      one would log.
+- [x] 11.10 — `just test-sitl` recipe wired in the top-level
+      justfile, plus an "End-to-end regression suite" section in
+      `docs/linking-into-px4.md` pointing at `tests/sitl/` as the
+      canonical "does this still work?" answer.
 
 ## Acceptance criteria
 
-- [ ] `cd tests/sitl && cargo nextest run` passes locally with
+- [x] `cd tests/sitl && cargo nextest run` passes locally with
       `PX4_AUTOPILOT_DIR=~/repos/PX4-Autopilot` set
-- [ ] Without `PX4_AUTOPILOT_DIR`, every test reports `[SKIPPED] PX4
+- [x] Without `PX4_AUTOPILOT_DIR`, every test reports `[SKIPPED] PX4
       tree not configured` rather than failing
-- [ ] First-time run takes < 60s (PX4 build); subsequent runs < 30s
-      (boot × N tests, no rebuild)
-- [ ] At minimum one test exercises each of: `#[task]` spawn,
-      `Publication`, `Subscription`, `panic_handler!()`,
-      multi-WorkQueue scheduling
+- [x] First-time run takes < 60s (PX4 build); subsequent runs < 30s
+      (9 tests in ~27s warm)
+- [x] At minimum one test exercises each of: `#[task]` spawn
+      (smoke), `Publication` (smoke), `Subscription` (pubsub),
+      `panic_handler!()` (panic), multi-WorkQueue scheduling
+      (multi_wq)
 - [ ] CI workflow stub committed (untested without a runner that has
       PX4 + arm/posix toolchain — but documents the invocation)
 
