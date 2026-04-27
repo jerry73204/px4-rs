@@ -21,3 +21,8 @@ default = []
 # Swap the px4-sys FFI surface for an in-process mock that executes
 # WorkItems on a std::thread pool. Used by host unit tests.
 std = ["px4-log/std"]
+
+[dev-dependencies]
+# Compile-fail tests for the #[task] macro. Locked with --locked in
+# CI so a transitive bump can't surprise the build.
+trybuild = "1"

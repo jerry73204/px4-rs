@@ -1,0 +1,5 @@
+error: #[task] requires an `async fn`
+ --> tests/trybuild/fail/sync_fn.rs:6:1
+  |
+6 | fn not_async() {}
+  | ^^

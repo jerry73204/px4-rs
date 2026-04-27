@@ -1,0 +1,5 @@
+error[E0425]: cannot find value `no_such_queue` in module `px4_workqueue::wq_configurations`
+ --> tests/trybuild/fail/bad_wq_name.rs:5:13
+  |
+5 | #[task(wq = "no_such_queue")]
+  |             ^^^^^^^^^^^^^^^ not found in `px4_workqueue::wq_configurations`

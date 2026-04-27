@@ -1,0 +1,5 @@
+error: unknown #[task] argument `priority` (expected `wq`)
+ --> tests/trybuild/fail/unknown_arg.rs:5:22
+  |
+5 | #[task(wq = "test1", priority = "high")]
+  |                      ^^^^^^^^

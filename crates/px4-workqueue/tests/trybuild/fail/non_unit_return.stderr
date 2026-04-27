@@ -1,0 +1,5 @@
+error: #[task] async fn must return () or !
+ --> tests/trybuild/fail/non_unit_return.rs:6:27
+  |
+6 | async fn returns_int() -> u32 {
+  |                           ^^^

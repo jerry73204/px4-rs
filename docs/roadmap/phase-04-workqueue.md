@@ -3,7 +3,7 @@
 **Goal**: Rust async runtime on PX4 WorkQueue, 1 task ≡ 1 WorkItem. This
 is the project's signature crate.
 
-**Status**: Core landed. Primitives (Timer/Notify/Channel) deferred to a follow-up.
+**Status**: Done
 **Priority**: P0
 **Depends on**: Phase 02, Phase 03
 
@@ -57,8 +57,11 @@ See [docs/async-model.md](../async-model.md) and
 - [x] 04.11 — `wq` validation: the expansion references
       `wq_configurations::<name>` by identifier, so a typo is a
       compile-time "no such constant" error with span at the `"..."` literal.
-- [ ] 04.12 — `trybuild` tests for good + bad invocations — deferred
-      (positive-path covered by `tests/task_macro.rs`).
+- [x] 04.12 — `trybuild` compile-fail tests pin diagnostics for
+      five known misuses: missing `wq`, unknown attribute argument,
+      `fn` (not `async`), non-`()` return type, and a `wq` literal
+      that doesn't resolve to a `wq_configurations` constant. The
+      positive path is still covered by `tests/task_macro.rs`.
 
 ## Spawn API shape (decided)
 

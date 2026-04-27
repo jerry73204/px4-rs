@@ -1,0 +1,7 @@
+error: missing required argument: #[task(wq = "...")]
+ --> tests/trybuild/fail/missing_wq.rs:5:1
+  |
+5 | #[task]
+  | ^^^^^^^
+  |
+  = note: this error originates in the attribute macro `task` (in Nightly builds, run with -Z macro-backtrace for more info)
