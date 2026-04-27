@@ -71,8 +71,12 @@ build-target TARGET:
         --exclude px4-msg-macros \
         --exclude px4-workqueue-macros
 
+# `--all-features` is critical: the host-mock tests for the runtime
+# primitives (Sleep, Notify, Channel, Pub/Sub round-trip, …) all gate
+# on `feature = "std"`. Without it, `cargo test` silently skips them
+# and the suite reports green while running ~10 actual asserts.
 test:
-    cargo test --workspace --all-targets
+    cargo test --workspace --all-targets --all-features
 
 # End-to-end SITL tests (boots `px4` as a subprocess, drives the
 # daemon with shell commands). Runs serially via nextest's `sitl`

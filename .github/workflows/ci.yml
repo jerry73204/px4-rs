@@ -11,12 +11,22 @@ env:
 
 jobs:
   # `just ci` = check + test + doc, exactly what a developer runs
-  # locally. The host build never links against a real PX4 — px4-sys
-  # falls back to its vendored bindings snapshot when PX4_AUTOPILOT_DIR
-  # is unset, which keeps this job self-contained.
+  # locally. Three runners exercise the host-mock surface across
+  # OSes — phase 09 wants the std-feature mocks (Sleep, Notify,
+  # Channel, Pub/Sub round-trip) to work the same on Linux, macOS
+  # and Windows so contributors aren't gated on a Linux box. The
+  # host build never links a real PX4 — px4-sys falls back to its
+  # vendored bindings snapshot when PX4_AUTOPILOT_DIR is unset.
   ci:
-    name: just ci (ubuntu-latest)
-    runs-on: ubuntu-latest
+    name: just ci (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -35,7 +45,11 @@ jobs:
             target
           key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
 
-      - run: just ci
+      - name: Run just ci
+        # Force bash on Windows so the justfile's `set shell := ["bash", ...]`
+        # finds the same interpreter the recipes assume.
+        shell: bash
+        run: just ci
 
   # Bare-metal cross builds. Every Pixhawk/STM target px4-rs claims to
   # support gets compiled here so a phase that breaks tier-3 target
