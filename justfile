@@ -69,7 +69,8 @@ build-target TARGET:
         --exclude xtask \
         --exclude px4-msg-codegen \
         --exclude px4-msg-macros \
-        --exclude px4-workqueue-macros
+        --exclude px4-workqueue-macros \
+        --exclude px4-macros
 
 # `--all-features` is critical: the host-mock tests for the runtime
 # primitives (Sleep, Notify, Channel, Pub/Sub round-trip, …) all gate

@@ -1,12 +1,14 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/px4",
     "crates/px4-sys",
     "crates/px4-log",
     "crates/px4-workqueue",
     "crates/px4-workqueue-macros",
     "crates/px4-msg-codegen",
     "crates/px4-msg-macros",
+    "crates/px4-macros",
     "crates/px4-uorb",
     "xtask",
 ]
@@ -39,12 +41,14 @@ authors = ["px4-rs contributors"]
 
 [workspace.dependencies]
 # Internal crates pinned to the workspace version.
+px4                   = { version = "0.1", path = "crates/px4" }
 px4-sys               = { version = "0.1", path = "crates/px4-sys" }
 px4-log               = { version = "0.1", path = "crates/px4-log" }
 px4-workqueue         = { version = "0.1", path = "crates/px4-workqueue" }
 px4-workqueue-macros  = { version = "0.1", path = "crates/px4-workqueue-macros" }
 px4-msg-codegen       = { version = "0.1", path = "crates/px4-msg-codegen" }
 px4-msg-macros        = { version = "0.1", path = "crates/px4-msg-macros" }
+px4-macros            = { version = "0.1", path = "crates/px4-macros" }
 px4-uorb              = { version = "0.1", path = "crates/px4-uorb" }
 
 # Third-party.

@@ -1,0 +1,27 @@
+[package]
+name          = "px4"
+version       = { workspace = true }
+edition       = { workspace = true }
+rust-version  = { workspace = true }
+license       = { workspace = true }
+repository    = { workspace = true }
+authors       = { workspace = true }
+description   = "Rusty facade for PX4 Autopilot — re-exports the user-facing APIs of px4-log, px4-workqueue, px4-uorb and friends."
+
+[lib]
+doctest = false
+
+[dependencies]
+px4-sys              = { workspace = true }
+px4-log              = { workspace = true }
+px4-workqueue        = { workspace = true }
+px4-workqueue-macros = { workspace = true }
+px4-uorb             = { workspace = true }
+px4-msg-macros       = { workspace = true }
+px4-macros           = { workspace = true }
+
+[features]
+default = []
+# Forward each consuming crate's std mock so a host build of `px4`
+# itself activates the in-process broker / hrt / WQ dispatcher.
+std = ["px4-log/std", "px4-workqueue/std", "px4-uorb/std"]
