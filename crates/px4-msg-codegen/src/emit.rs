@@ -6,9 +6,37 @@ use quote::{format_ident, quote};
 use crate::layout::{LaidOutField, LaidOutMsg, rust_type_for};
 use crate::model::Constant;
 
+/// Crate paths used in the emitted code. Defaults point at the
+/// underlying workspace crates, but the proc-macro can override them
+/// with `::px4` when the user is reaching through the umbrella facade.
+#[derive(Clone)]
+pub struct EmitPaths {
+    pub uorb: TokenStream,
+    pub sys: TokenStream,
+}
+
+impl Default for EmitPaths {
+    fn default() -> Self {
+        Self {
+            uorb: quote!(::px4_uorb),
+            sys: quote!(::px4_sys),
+        }
+    }
+}
+
 /// Emit a `#[repr(C)] pub struct <Name>` + constants + topic list +
-/// a compile-time size assertion.
+/// a compile-time size assertion. Uses the default crate paths
+/// (`::px4_uorb`, `::px4_sys`); call [`emit_with_paths`] to override
+/// for the umbrella case.
 pub fn emit(laid: &LaidOutMsg) -> TokenStream {
+    emit_with_paths(laid, &EmitPaths::default())
+}
+
+/// Like [`emit`] but threads explicit crate paths into the generated
+/// `OrbMetadata` / `UorbTopic` items. The proc-macro frontend resolves
+/// these via `proc-macro-crate` so a user depending only on `px4`
+/// gets a working impl block.
+pub fn emit_with_paths(laid: &LaidOutMsg, paths: &EmitPaths) -> TokenStream {
     let name = Ident::new(&laid.name, Span::call_site());
 
     let fields: Vec<TokenStream> = laid
@@ -38,7 +66,7 @@ pub fn emit(laid: &LaidOutMsg) -> TokenStream {
     let topic_items: Vec<TokenStream> = laid
         .topics
         .iter()
-        .map(|topic_name| emit_topic(&laid.name, topic_name, size, &laid.constants))
+        .map(|topic_name| emit_topic(&laid.name, topic_name, size, &laid.constants, paths))
         .collect();
 
     quote! {
@@ -80,7 +108,10 @@ fn emit_topic(
     topic_name: &str,
     size: usize,
     constants: &[Constant],
+    paths: &EmitPaths,
 ) -> TokenStream {
+    let uorb = &paths.uorb;
+    let sys = &paths.sys;
     let struct_ident = Ident::new(struct_name, Span::call_site());
     let topic_ident = Ident::new(topic_name, Span::call_site());
     let meta_ident = format_ident!("__ORB_META_{}", topic_name.to_uppercase());
@@ -108,8 +139,8 @@ fn emit_topic(
         };
 
         #[allow(non_upper_case_globals)]
-        static #meta_ident: ::px4_uorb::OrbMetadata = ::px4_uorb::OrbMetadata::new(
-            ::px4_sys::orb_metadata {
+        static #meta_ident: #uorb::OrbMetadata = #uorb::OrbMetadata::new(
+            #sys::orb_metadata {
                 o_name: #cname_ident.as_ptr(),
                 o_size: #size_u16,
                 o_size_no_padding: #size_u16,
@@ -123,12 +154,12 @@ fn emit_topic(
         /// `px4_rs_find_orb_meta()` so each publish only pays the
         /// lookup once.
         #[allow(non_upper_case_globals)]
-        static #resolved_ident: ::core::sync::atomic::AtomicPtr<::px4_sys::orb_metadata> =
+        static #resolved_ident: ::core::sync::atomic::AtomicPtr<#sys::orb_metadata> =
             ::core::sync::atomic::AtomicPtr::new(::core::ptr::null_mut());
 
-        impl ::px4_uorb::UorbTopic for #topic_ident {
+        impl #uorb::UorbTopic for #topic_ident {
             type Msg = #struct_ident;
-            fn metadata() -> &'static ::px4_sys::orb_metadata {
+            fn metadata() -> &'static #sys::orb_metadata {
                 use ::core::sync::atomic::Ordering;
                 let cached = #resolved_ident.load(Ordering::Acquire);
                 if !cached.is_null() {
@@ -139,7 +170,7 @@ fn emit_topic(
                 // SAFETY: CStr pointer is 'static, PX4's lookup is
                 // read-only and thread-safe.
                 let canonical = unsafe {
-                    ::px4_sys::px4_rs_find_orb_meta(#cname_ident.as_ptr())
+                    #sys::px4_rs_find_orb_meta(#cname_ident.as_ptr())
                 };
                 if canonical.is_null() {
                     // Unknown to PX4's compile-time table (e.g. a

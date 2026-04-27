@@ -10,12 +10,9 @@ crate-type = ["staticlib"]
 doctest    = false
 
 [dependencies]
-# Relative paths from this Cargo.toml. When copied out of the px4-rs
-# tree, rewrite these to point at wherever your px4-rs checkout lives.
-px4-log              = { path = "../../crates/px4-log" }
-px4-sys              = { path = "../../crates/px4-sys" }
-px4-workqueue        = { path = "../../crates/px4-workqueue" }
-px4-workqueue-macros = { path = "../../crates/px4-workqueue-macros" }
+# Relative path from this Cargo.toml. When copied out of the px4-rs
+# tree, rewrite this to point at wherever your px4-rs checkout lives.
+px4 = { path = "../../crates/px4" }
 
 [profile.release]
 panic     = "abort"

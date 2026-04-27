@@ -1,0 +1,5 @@
+error: unknown #[px4::main] argument `priority` (expected `name`)
+ --> tests/trybuild/fail/unknown_arg.rs:3:22
+  |
+3 | #[main(name = "foo", priority = "high")]
+  |                      ^^^^^^^^

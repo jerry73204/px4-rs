@@ -14,18 +14,18 @@
 //! mod rate_watch {
 //!     use super::*;
 //!     type __Fut = impl ::core::future::Future<Output = ()>;
-//!     static __CELL: ::px4_workqueue::WorkItemCell<__Fut> =
-//!         ::px4_workqueue::WorkItemCell::new();
+//!     static __CELL: #wq::WorkItemCell<__Fut> =
+//!         #wq::WorkItemCell::new();
 //!     #[::core::prelude::v1::define_opaque(__Fut)]
 //!     fn __make(x: u32) -> __Fut {
 //!         async move { /* body */ }
 //!     }
 //!     pub fn spawn(x: u32)
-//!         -> Result<::px4_workqueue::SpawnToken, ::px4_workqueue::SpawnError>
+//!         -> Result<#wq::SpawnToken, #wq::SpawnError>
 //!     {
 //!         __CELL.try_spawn(
 //!             __make(x),
-//!             &::px4_workqueue::wq_configurations::rate_ctrl,
+//!             &#wq::wq_configurations::rate_ctrl,
 //!             /* c-string name */,
 //!         )
 //!     }
@@ -36,10 +36,38 @@
 
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
+use proc_macro_crate::{FoundCrate, crate_name};
 use quote::quote;
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
-use syn::{parse_macro_input, Ident, ItemFn, LitStr, ReturnType, Token};
+use syn::{Ident, ItemFn, LitStr, ReturnType, Token, parse_macro_input};
+
+/// Resolve the path the user's crate uses to reach `px4-workqueue` —
+/// either directly (`#wq`) or through the `px4`
+/// umbrella (`::px4`). Falls back to the direct name when neither
+/// is found in the manifest, which leaves the existing error
+/// messaging in place.
+fn workqueue_path() -> TokenStream2 {
+    if let Ok(found) = crate_name("px4-workqueue") {
+        return match found {
+            FoundCrate::Itself => quote!(crate),
+            FoundCrate::Name(name) => {
+                let id = Ident::new(&name, Span::call_site());
+                quote!(::#id)
+            }
+        };
+    }
+    if let Ok(found) = crate_name("px4") {
+        return match found {
+            FoundCrate::Itself => quote!(crate),
+            FoundCrate::Name(name) => {
+                let id = Ident::new(&name, Span::call_site());
+                quote!(::#id)
+            }
+        };
+    }
+    quote!(::px4_workqueue)
+}
 
 /// Attribute arguments: currently just `wq = "name"`.
 struct Args {
@@ -144,6 +172,7 @@ fn expand(args: Args, f: ItemFn) -> syn::Result<TokenStream2> {
     // Leak the task name to the byte string: concat!("fn_name", "\0").
     let name_lit = LitStr::new(&fn_name.to_string(), fn_name.span());
 
+    let wq = workqueue_path();
     let expanded = quote! {
         #[allow(non_snake_case)]
         #vis mod #mod_name {
@@ -152,8 +181,8 @@ fn expand(args: Args, f: ItemFn) -> syn::Result<TokenStream2> {
             pub(super) type __Fut = impl ::core::future::Future<Output = ()>;
 
             #[allow(non_upper_case_globals)]
-            static __CELL: ::px4_workqueue::WorkItemCell<__Fut> =
-                ::px4_workqueue::WorkItemCell::new();
+            static __CELL: #wq::WorkItemCell<__Fut> =
+                #wq::WorkItemCell::new();
 
             async fn __body(#fn_args) #body
 
@@ -167,8 +196,8 @@ fn expand(args: Args, f: ItemFn) -> syn::Result<TokenStream2> {
             pub fn try_spawn(
                 #fn_args
             ) -> ::core::result::Result<
-                ::px4_workqueue::SpawnToken,
-                ::px4_workqueue::SpawnError,
+                #wq::SpawnToken,
+                #wq::SpawnError,
             > {
                 const __NAME: &::core::ffi::CStr = unsafe {
                     ::core::ffi::CStr::from_bytes_with_nul_unchecked(
@@ -177,14 +206,14 @@ fn expand(args: Args, f: ItemFn) -> syn::Result<TokenStream2> {
                 };
                 __CELL.try_spawn(
                     __make(#(#arg_idents),*),
-                    &::px4_workqueue::wq_configurations::#wq_ident,
+                    &#wq::wq_configurations::#wq_ident,
                     __NAME,
                 )
             }
 
             /// Spawn this task and panic on `Busy`. Use for cold-start
             /// code where a second spawn is a programmer error.
-            pub fn spawn(#fn_args) -> ::px4_workqueue::SpawnToken {
+            pub fn spawn(#fn_args) -> #wq::SpawnToken {
                 const __NAME: &::core::ffi::CStr = unsafe {
                     ::core::ffi::CStr::from_bytes_with_nul_unchecked(
                         ::core::concat!(#name_lit, "\0").as_bytes(),
@@ -192,7 +221,7 @@ fn expand(args: Args, f: ItemFn) -> syn::Result<TokenStream2> {
                 };
                 __CELL.spawn(
                     __make(#(#arg_idents),*),
-                    &::px4_workqueue::wq_configurations::#wq_ident,
+                    &#wq::wq_configurations::#wq_ident,
                     __NAME,
                 )
             }

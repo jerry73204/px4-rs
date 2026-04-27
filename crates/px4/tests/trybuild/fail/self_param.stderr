@@ -1,0 +1,5 @@
+error: #[px4::main] fn cannot take `self`
+ --> tests/trybuild/fail/self_param.rs:7:14
+  |
+7 |     fn entry(self) {}
+  |              ^^^^

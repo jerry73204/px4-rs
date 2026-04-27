@@ -1,0 +1,11 @@
+error[E0277]: the trait bound `&str: ModuleResult` is not satisfied
+ --> tests/trybuild/fail/bad_return_type.rs:6:1
+  |
+6 | #[main]
+  | ^^^^^^^ the trait `ModuleResult` is not implemented for `&str`
+  |
+  = help: the following other types implement trait `ModuleResult`:
+            ()
+            Result<T, E>
+            i32
+  = note: this error originates in the attribute macro `main` (in Nightly builds, run with -Z macro-backtrace for more info)

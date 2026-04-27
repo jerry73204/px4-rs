@@ -24,14 +24,8 @@
 #![no_std]
 #![feature(type_alias_impl_trait)]
 
-use core::ffi::{c_char, c_int};
+use px4::{Args, Publication, Subscription, info, main, panic_handler, px4_message, task};
 
-use px4_log::{info, module, panic_handler};
-use px4_msg_macros::px4_message;
-use px4_uorb::{Publication, Subscription};
-use px4_workqueue::task;
-
-module!("gyro_watch");
 panic_handler!();
 
 #[px4_message("SensorGyro.msg")]
@@ -67,32 +61,25 @@ async fn watcher() {
     }
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn gyro_watch_main(argc: c_int, argv: *mut *mut c_char) -> c_int {
-    match parse_first_arg(argc, argv) {
-        Some(b"start") => match watcher::try_spawn() {
-            Ok(token) => {
-                token.forget();
-                info!("started");
-                0
-            }
-            Err(_) => {
-                px4_log::err!("already running");
-                1
-            }
-        },
+#[main]
+fn main(args: Args) -> Result<(), &'static str> {
+    match args.subcommand() {
+        Some(b"start") => {
+            watcher::try_spawn()
+                .map_err(|_| "already running")?
+                .forget();
+            info!("started");
+            Ok(())
+        }
         Some(b"status") => {
             info!("running");
-            0
+            Ok(())
         }
         Some(b"stop") => {
             info!("stop is a no-op in this example");
-            0
+            Ok(())
         }
-        _ => {
-            px4_log::err!("usage: gyro_watch {{start|stop|status}}");
-            1
-        }
+        _ => Err("usage: gyro_watch {start|stop|status}"),
     }
 }
 
@@ -100,25 +87,4 @@ pub extern "C" fn gyro_watch_main(argc: c_int, argv: *mut *mut c_char) -> c_int 
 /// no `abs` and pulling in `libm` for one bit-flip is overkill.
 fn abs_f32(x: f32) -> f32 {
     f32::from_bits(x.to_bits() & 0x7FFF_FFFF)
-}
-
-fn parse_first_arg<'a>(argc: c_int, argv: *mut *mut c_char) -> Option<&'a [u8]> {
-    if argc < 2 || argv.is_null() {
-        return None;
-    }
-    // SAFETY: argv[1] is a NUL-terminated C string from PX4's shell.
-    unsafe {
-        let s = *argv.add(1);
-        if s.is_null() {
-            return None;
-        }
-        let mut len = 0usize;
-        while *s.add(len) != 0 {
-            len += 1;
-            if len > 64 {
-                return None;
-            }
-        }
-        Some(core::slice::from_raw_parts(s as *const u8, len))
-    }
 }

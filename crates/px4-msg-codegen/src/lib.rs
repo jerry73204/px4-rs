@@ -15,7 +15,7 @@ pub mod layout;
 pub mod model;
 pub mod parser;
 
-pub use emit::emit;
+pub use emit::{EmitPaths, emit, emit_with_paths};
 pub use layout::{LaidOutField, LaidOutMsg, Resolver};
 pub use model::{Constant, Field, FieldType, MsgDef, ParseError, Scalar};
 pub use parser::{parse_file, parse_str};
@@ -29,6 +29,17 @@ pub fn generate(
     path: &Path,
     search_path: Vec<std::path::PathBuf>,
 ) -> Result<proc_macro2::TokenStream, ParseError> {
+    generate_with_paths(path, search_path, &EmitPaths::default())
+}
+
+/// Like [`generate`] but threads custom crate paths into the
+/// emitted impl blocks. The `px4-msg-macros` proc-macro frontend
+/// uses this to swap in the umbrella's `::px4` path when present.
+pub fn generate_with_paths(
+    path: &Path,
+    search_path: Vec<std::path::PathBuf>,
+    paths: &EmitPaths,
+) -> Result<proc_macro2::TokenStream, ParseError> {
     let def = parse_file(path)?;
 
     let mut search = search_path;
@@ -40,5 +51,5 @@ pub fn generate(
 
     let mut resolver = Resolver::new(search);
     let laid = resolver.layout(&def)?;
-    Ok(emit(&laid))
+    Ok(emit_with_paths(&laid, paths))
 }

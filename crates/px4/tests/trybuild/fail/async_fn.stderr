@@ -1,0 +1,13 @@
+error: #[px4::main] cannot annotate `async fn` — PX4's entry point is synchronous
+ --> tests/trybuild/fail/async_fn.rs:4:1
+  |
+4 | async fn entry(_a: Args) {}
+  | ^^^^^
+
+warning: unused import: `Args`
+ --> tests/trybuild/fail/async_fn.rs:1:11
+  |
+1 | use px4::{Args, main};
+  |           ^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default

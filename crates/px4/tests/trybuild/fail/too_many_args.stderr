@@ -1,0 +1,13 @@
+error: #[px4::main] fn takes at most one argument (an `Args`)
+ --> tests/trybuild/fail/too_many_args.rs:4:10
+  |
+4 | fn entry(_a: Args, _b: u32) {}
+  |          ^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Args`
+ --> tests/trybuild/fail/too_many_args.rs:1:11
+  |
+1 | use px4::{Args, main};
+  |           ^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default

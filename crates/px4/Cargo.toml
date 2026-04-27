@@ -25,3 +25,8 @@ default = []
 # Forward each consuming crate's std mock so a host build of `px4`
 # itself activates the in-process broker / hrt / WQ dispatcher.
 std = ["px4-log/std", "px4-workqueue/std", "px4-uorb/std"]
+
+[dev-dependencies]
+# Compile-fail tests for #[px4::main]. Pinned diagnostics catch span
+# regressions in the proc-macro front-end.
+trybuild = "1"

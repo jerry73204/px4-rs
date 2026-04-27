@@ -20,14 +20,11 @@
 #![no_std]
 #![feature(type_alias_impl_trait)]
 
-use core::ffi::{c_char, c_int};
 use core::sync::atomic::{AtomicU32, Ordering};
 use core::time::Duration;
 
-use px4_log::{info, module, panic_handler};
-use px4_workqueue::{Notify, sleep, task};
+use px4::{Args, Notify, info, main, panic_handler, sleep, task};
 
-module!("multi_task");
 panic_handler!();
 
 static SIGNAL: Notify = Notify::new();
@@ -52,65 +49,31 @@ async fn consumer() {
     }
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn multi_task_main(argc: c_int, argv: *mut *mut c_char) -> c_int {
-    match parse_first_arg(argc, argv) {
+#[main]
+fn main(args: Args) -> Result<(), &'static str> {
+    match args.subcommand() {
         Some(b"start") => {
             // Spawn the consumer first so a producer notify that
             // races with the consumer's first poll always lands as a
             // stored permit, never on a not-yet-registered waiter.
-            let cons = match consumer::try_spawn() {
-                Ok(t) => t,
-                Err(_) => {
-                    px4_log::err!("consumer already running");
-                    return 1;
-                }
-            };
-            let prod = match producer::try_spawn() {
-                Ok(t) => t,
-                Err(_) => {
-                    px4_log::err!("producer already running");
-                    return 1;
-                }
-            };
-            cons.forget();
-            prod.forget();
+            consumer::try_spawn()
+                .map_err(|_| "consumer already running")?
+                .forget();
+            producer::try_spawn()
+                .map_err(|_| "producer already running")?
+                .forget();
             info!("started");
-            0
+            Ok(())
         }
         Some(b"status") => {
             let n = WAKES.load(Ordering::Acquire);
             info!("running, wake count={n}");
-            0
+            Ok(())
         }
         Some(b"stop") => {
             info!("stop is a no-op in this example");
-            0
+            Ok(())
         }
-        _ => {
-            px4_log::err!("usage: multi_task {{start|stop|status}}");
-            1
-        }
-    }
-}
-
-fn parse_first_arg<'a>(argc: c_int, argv: *mut *mut c_char) -> Option<&'a [u8]> {
-    if argc < 2 || argv.is_null() {
-        return None;
-    }
-    // SAFETY: argv[1] is a NUL-terminated C string from PX4's shell.
-    unsafe {
-        let s = *argv.add(1);
-        if s.is_null() {
-            return None;
-        }
-        let mut len = 0usize;
-        while *s.add(len) != 0 {
-            len += 1;
-            if len > 64 {
-                return None;
-            }
-        }
-        Some(core::slice::from_raw_parts(s as *const u8, len))
+        _ => Err("usage: multi_task {start|stop|status}"),
     }
 }

@@ -12,10 +12,11 @@ description   = "#[px4_message(\"path/to/Foo.msg\")] proc macro — parses and e
 proc-macro = true
 
 [dependencies]
-proc-macro2     = { workspace = true }
-quote           = { workspace = true }
-syn             = { workspace = true }
-px4-msg-codegen = { workspace = true }
+proc-macro2      = { workspace = true }
+proc-macro-crate = { workspace = true }
+quote            = { workspace = true }
+syn              = { workspace = true }
+px4-msg-codegen  = { workspace = true }
 
 [dev-dependencies]
 # The macro emits references to ::px4_uorb and ::px4_sys, so test

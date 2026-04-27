@@ -5,7 +5,7 @@
 `px4::` facade. End state: a user can write a complete PX4 Rust
 module with one `use px4::*` and ~15 lines of code.
 
-**Status**: Not Started
+**Status**: Done
 **Priority**: P1 (the largest lever on day-1 user experience)
 **Depends on**: Phase 03 (`px4-log`), Phase 04 (`px4-workqueue`),
 Phase 06 (`px4-uorb`)
@@ -188,44 +188,61 @@ types stay namespaced, not flattened, to avoid the
 
 ## Work items
 
-- [ ] 12.1 — `px4-macros` proc-macro crate with `#[main]`. Parse
-      `name = "..."`, default to `CARGO_PKG_NAME` with `-`→`_`.
-      Validate signature (sync, no `self`, ≤ 1 arg). Emit the
-      `MODULE_NAME` const + the `extern "C" fn <name>_main`
-      wrapper that calls the user fn through `ModuleResult`.
-- [ ] 12.2 — `Args` iterator + `ModuleResult` trait in `px4-log`.
-      Re-exported from the umbrella.
-- [ ] 12.3 — `px4` umbrella facade. Cargo.toml deps on every
-      runtime crate; `lib.rs` is just `pub use` lines plus a
-      crate-level rustdoc that walks new users through writing a
-      module with a single `use px4::*`.
-- [ ] 12.4 — Migrate `examples/hello_module/`, `examples/multi_task/`
-      and `examples/gyro_watch/` to the new API. Each module should
-      shrink by ~30 lines (parse_first_arg + extern "C" boilerplate).
-- [ ] 12.5 — `trybuild` compile-fail tests for `#[main]`:
-      `async fn`, `fn(self, …)`, more-than-one-arg, and a return
-      type that doesn't implement `ModuleResult`. Pin diagnostics
-      so a span regression fails the build.
-- [ ] 12.6 — Run the SITL e2e suite (`tests/sitl/`) against the
-      migrated examples. The existing tests (`example_*.rs`) check
-      log output, not Cargo.toml plumbing — they should pass
-      unchanged, confirming the macro produces an equivalent C
-      entry point.
+- [x] 12.1 — `px4-macros` proc-macro crate with `#[main]`. Parses
+      `name = "..."` (defaulting to `CARGO_PKG_NAME` with `-`→`_`),
+      validates the signature (sync, no `self`, ≤ 1 arg), emits the
+      `MODULE_NAME` const at the call site, and wraps the user fn in
+      an `extern "C" fn <name>_main(int, char**)` that runs through
+      `ModuleResult::into_c_int`.
+- [x] 12.2 — `Args` iterator + `ModuleResult` trait in `px4-log`.
+      Re-exported from the umbrella. Five Args tests + five
+      ModuleResult tests cover the contract.
+- [x] 12.3 — `px4` umbrella facade. Re-exports the user-facing API
+      under one namespace. Three sub-types that collide on simple
+      names (`Recv` × 2, `Send` shadow of `core::marker::Send`)
+      stay namespaced under `px4::workqueue::*` / `px4::uorb::*`.
+      Forwards `feature = "std"` to the consuming crates.
+- [x] 12.3a (extra) — `proc-macro-crate` integration in
+      `px4-workqueue-macros` and `px4-msg-macros`: emitted paths
+      now resolve through `::px4` when the user has only the
+      umbrella, or directly through `::px4_workqueue` /
+      `::px4_uorb` / `::px4_sys` when the user pins those. Without
+      this, `#[task]` and `#[px4_message]` would have failed under
+      the umbrella because they emit absolute crate-rooted paths.
+      `px4-msg-codegen` grew an `EmitPaths` overrideable struct +
+      `generate_with_paths` API to support this.
+- [x] 12.4 — Migrated `examples/hello_module/`,
+      `examples/multi_task/` and `examples/gyro_watch/` to the new
+      API. Each module dropped ~30 lines: `parse_first_arg`,
+      `extern "C"` wrapper, manual exit-code returns. Cargo.toml
+      now reads `px4 = { … }` only — the umbrella absorbs the
+      previous fan-out across `px4-log`, `px4-sys`, `px4-workqueue`,
+      `px4-workqueue-macros`, `px4-uorb`, `px4-msg-macros`.
+- [x] 12.5 — `trybuild` compile-fail tests for `#[main]` in
+      `crates/px4/tests/trybuild/fail/`: `async_fn`, `self_param`,
+      `too_many_args`, `unknown_arg`, `bad_return_type`. Each `.rs`
+      has a paired `.stderr` snapshot pinning the diagnostic span.
+- [x] 12.6 — SITL e2e suite (12 tests) passes against the migrated
+      examples. The `example_hello_module`, `example_multi_task`
+      and `example_gyro_watch` tests check log output — they pass
+      unchanged, confirming the macro-emitted C entry point
+      behaves identically to the hand-rolled one it replaced.
 
 ## Acceptance criteria
 
-- [ ] `cargo build -p px4` succeeds against the host fallback (no
+- [x] `cargo build -p px4` succeeds against the host fallback (no
       `PX4_AUTOPILOT_DIR` needed).
-- [ ] `cargo build -p px4 --target thumbv7em-none-eabihf` succeeds.
-- [ ] All three migrated examples build for host + thumbv7em and
-      drop ≥ 25 lines each vs the pre-migration shape.
-- [ ] `cd tests/sitl && cargo nextest run` passes, including the
-      three `example_*` tests.
-- [ ] `#[main]` rejects `async fn`, `self`, > 1 arg with a
-      pinned diagnostic in `tests/trybuild/`.
-- [ ] `cargo doc -p px4 --open` lands on a page that gives a new
-      user enough to write a module without diving into the
-      lower-level crates' docs.
+- [x] `cargo build -p px4 --target thumbv7em-none-eabihf` succeeds.
+- [x] All three migrated examples build for host + thumbv7em and
+      drop ≥ 25 lines each vs the pre-migration shape (hello_module
+      went from 89 → 51, multi_task 117 → 80, gyro_watch 125 → 86).
+- [x] `cd tests/sitl && cargo nextest run` passes 12/12, including
+      the three `example_*` tests (~30 s warm).
+- [x] `#[main]` rejects `async fn`, `self`, > 1 arg, unknown
+      attribute args, and non-`ModuleResult` return types — five
+      pinned diagnostics in `crates/px4/tests/trybuild/fail/`.
+- [x] `cargo doc -p px4 --no-deps` produces a complete crate page
+      whose top-level rustdoc is a runnable hello-world.
 
 ## Out of scope
 

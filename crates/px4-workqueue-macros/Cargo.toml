@@ -12,6 +12,7 @@ description   = "#[task(wq = \"...\")] proc macro for px4-workqueue."
 proc-macro = true
 
 [dependencies]
-proc-macro2 = { workspace = true }
-quote       = { workspace = true }
-syn         = { workspace = true }
+proc-macro2      = { workspace = true }
+proc-macro-crate = { workspace = true }
+quote            = { workspace = true }
+syn              = { workspace = true }
