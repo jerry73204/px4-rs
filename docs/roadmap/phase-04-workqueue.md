@@ -40,7 +40,10 @@ See [docs/async-model.md](../async-model.md) and
 - [x] 04.7 — `Notify` — single-waiter edge-triggered signal modeled
       on `tokio::sync::Notify::notify_one`. Stores at most one
       permit; multiple notifies coalesce.
-- [ ] 04.8 — `Channel<T, const N: usize>` — deferred.
+- [x] 04.8 — `Channel<T, const N: usize>` — bounded SPSC, no
+      allocation. Capacity = `N`; wrapping `head`/`tail` counters
+      with `AtomicWaker`s on each end so a parked sender wakes when
+      a slot frees and a parked receiver wakes when a value lands.
 
 ### `#[task]` macro
 

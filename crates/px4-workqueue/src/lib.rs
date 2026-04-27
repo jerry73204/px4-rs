@@ -27,6 +27,7 @@
 
 mod atomic_waker;
 mod cell;
+mod channel;
 mod ffi;
 mod hrt;
 mod notify;
@@ -36,6 +37,7 @@ mod wq;
 
 pub use atomic_waker::AtomicWaker;
 pub use cell::{SpawnError, SpawnToken, WorkItemCell};
+pub use channel::{Channel, Recv, Send};
 pub use notify::{Notified, Notify};
 pub use timer::{Sleep, sleep};
 pub use wq::{WqConfig, wq_configurations};
