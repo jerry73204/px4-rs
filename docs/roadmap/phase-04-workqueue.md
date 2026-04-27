@@ -32,9 +32,14 @@ See [docs/async-model.md](../async-model.md) and
 ### Primitives
 
 - [x] 04.5 — `AtomicWaker` ported from `futures-util` (no alloc).
-- [ ] 04.6 — `Timer` — deferred to a follow-up. `hrt_call_every` hooks
-      exist in `px4-sys`; need an `AtomicWaker`-backed `tick().await`.
-- [ ] 04.7 — `Notify` — deferred.
+- [x] 04.6 — `sleep(Duration)` — pinned `Future` that arms PX4's
+      `hrt_call_after` on first poll, wakes its waker from the HRT
+      callback, and runs `hrt_cancel` on Drop. Host mock fans out a
+      short-lived std thread per timer; cancellation is a flag the
+      thread checks before firing.
+- [x] 04.7 — `Notify` — single-waiter edge-triggered signal modeled
+      on `tokio::sync::Notify::notify_one`. Stores at most one
+      permit; multiple notifies coalesce.
 - [ ] 04.8 — `Channel<T, const N: usize>` — deferred.
 
 ### `#[task]` macro
