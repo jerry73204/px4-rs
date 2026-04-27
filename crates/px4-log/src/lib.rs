@@ -44,6 +44,11 @@ use core::fmt::{self, Write};
 // Panic handler lives in the user's module crate via the
 // `px4_log::panic_handler!()` macro. See the macro docs below.
 
+mod args;
+mod result;
+pub use args::{Args, Iter as ArgsIter};
+pub use result::ModuleResult;
+
 #[cfg(feature = "log")]
 mod log_backend;
 #[cfg(feature = "log")]
