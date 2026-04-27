@@ -23,6 +23,8 @@ use crate::topic::UorbTopic;
 pub struct Subscription<T: UorbTopic> {
     cb: Cell<*mut ffi::SubCb>,
     waker: AtomicWaker,
+    interval_us: u32,
+    instance: u8,
     _t: PhantomData<fn() -> T>,
     /// `*const ()` is `!Send` and `!Sync`.
     _not_send: PhantomData<*const ()>,
@@ -31,9 +33,32 @@ pub struct Subscription<T: UorbTopic> {
 
 impl<T: UorbTopic> Subscription<T> {
     pub const fn new() -> Self {
+        Self::new_with(0, 0)
+    }
+
+    /// Construct a subscription with an explicit minimum interval
+    /// between deliveries. PX4's `SubscriptionCallback` enforces this
+    /// by skipping `call()` invocations that arrive sooner than
+    /// `interval_us` microseconds after the previous one — useful for
+    /// throttling a high-rate publisher.
+    pub const fn with_interval_us(interval_us: u32) -> Self {
+        Self::new_with(interval_us, 0)
+    }
+
+    /// Construct a subscription on a specific multi-instance index.
+    /// Defaults to 0; use this when a topic has multiple advertised
+    /// instances and you need a particular one.
+    pub const fn with_instance(instance: u8) -> Self {
+        Self::new_with(0, instance)
+    }
+
+    /// Combined-knobs constructor.
+    pub const fn new_with(interval_us: u32, instance: u8) -> Self {
         Self {
             cb: Cell::new(core::ptr::null_mut()),
             waker: AtomicWaker::new(),
+            interval_us,
+            instance,
             _t: PhantomData,
             _not_send: PhantomData,
             _pin: PhantomPinned,
@@ -52,6 +77,8 @@ impl<T: UorbTopic> Subscription<T> {
         let cb = unsafe {
             ffi::sub_cb_new(
                 T::metadata(),
+                self.interval_us,
+                self.instance,
                 &self.waker as *const _ as *mut c_void,
                 wake_trampoline,
             )

@@ -3,7 +3,7 @@
 **Goal**: Safe typed `Publication<M>` / `Subscription<M>` with async
 `recv()` driven by uORB's `SubscriptionCallback`.
 
-**Status**: Complete (single-instance; advertise_multi/update_rate_hz deferred)
+**Status**: Done
 **Priority**: P0
 **Depends on**: Phase 02, Phase 04, Phase 05
 
@@ -46,10 +46,22 @@ impl<M: UorbTopic> Subscription<M> {
       the integration test uses an explicit `yield_now().await` between
       publishes so the subscriber consumes each sample. `recv_all` is
       deferred — implementable as a thin loop on `try_recv`.
-- [ ] 06.6 — `update_rate_hz`, `advertise_multi(instance, priority)`,
-      and `queue_size` knobs — deferred. The trampoline's `interval_us`
-      and `instance` parameters are already plumbed; surfacing them is
-      a small follow-up.
+- [x] 06.6 — Multi-instance + interval knobs:
+        * `Publication::advertise_multi(initial, requested_instance)`
+          surfaces PX4's `orb_advertise_multi` in/out instance arg
+          and returns the assigned index.
+        * `Publication::unadvertise()` clears the handle so the
+          static can be re-armed without dropping it.
+        * `Subscription::with_interval_us` / `with_instance` /
+          `new_with` constructors thread the `interval_us` and
+          `instance` args of `px4_rs_sub_cb_new` (already plumbed
+          through the trampoline since phase 02) into the typed
+          API. PX4 enforces the interval on target; the host mock
+          collapses every interval onto immediate delivery, which
+          the new test files document.
+      The host mock also stops resetting `seq` to 1 on advertise,
+      so a re-advertise after `unadvertise()` is observable to
+      subscribers whose `last_seen` survived the cycle.
 - [x] 06.7 — Integration test (`tests/round_trip.rs`): publisher and
       subscriber `#[task]`s on the same WQ, 1000 samples round-trip,
       verifies count and last-sample contents.

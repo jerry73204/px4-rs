@@ -26,6 +26,16 @@ mod real {
         unsafe { px4_sys::orb_advertise_multi(meta, initial, &mut instance) }
     }
 
+    /// Advertise on a specific instance. PX4 may reassign; the actual
+    /// instance is written back through `instance_inout`.
+    pub(crate) unsafe fn advertise_multi(
+        meta: &'static orb_metadata,
+        initial: *const c_void,
+        instance_inout: &mut i32,
+    ) -> OrbAdvert {
+        unsafe { px4_sys::orb_advertise_multi(meta, initial, instance_inout) }
+    }
+
     pub(crate) unsafe fn publish(
         meta: &'static orb_metadata,
         handle: OrbAdvert,
@@ -42,10 +52,12 @@ mod real {
 
     pub(crate) unsafe fn sub_cb_new(
         meta: &'static orb_metadata,
+        interval_us: u32,
+        instance: u8,
         ctx: *mut c_void,
         call: unsafe extern "C" fn(*mut c_void),
     ) -> *mut SubCb {
-        unsafe { px4_sys::px4_rs_sub_cb_new(meta, 0, 0, ctx, Some(call)) }
+        unsafe { px4_sys::px4_rs_sub_cb_new(meta, interval_us, instance, ctx, Some(call)) }
     }
 
     pub(crate) unsafe fn sub_cb_register(cb: *mut SubCb) -> bool {
@@ -146,11 +158,27 @@ pub(crate) mod mock {
             let mut data = topic.data.lock().unwrap();
             std::ptr::copy_nonoverlapping(initial as *const u8, data.as_mut_ptr(), topic.size);
         }
-        *topic.seq.lock().unwrap() = 1;
+        // Bump the sequence so existing subscribers (whose last_seen
+        // counters survive an unadvertise/re-advertise cycle) observe
+        // this initial sample. Resetting to 1 unconditionally would
+        // mask the new payload from any sub still parked at a higher
+        // generation.
+        *topic.seq.lock().unwrap() += 1;
         // Fire any callbacks that registered before the first publish.
         notify(&topic);
         // Leak an Arc clone as the handle.
         Arc::into_raw(topic) as *mut c_void
+    }
+
+    /// Mock has no notion of multi-instance — every publication of a
+    /// given topic name shares one broker entry. We honour the request
+    /// by writing back the same instance the caller passed in.
+    pub(crate) unsafe fn advertise_multi(
+        meta: &'static orb_metadata,
+        initial: *const c_void,
+        _instance_inout: &mut i32,
+    ) -> OrbAdvert {
+        unsafe { advertise(meta, initial) }
     }
 
     pub(crate) unsafe fn publish(
@@ -196,6 +224,8 @@ pub(crate) mod mock {
 
     pub(crate) unsafe fn sub_cb_new(
         meta: &'static orb_metadata,
+        _interval_us: u32,
+        _instance: u8,
         ctx: *mut c_void,
         call: unsafe extern "C" fn(*mut c_void),
     ) -> *mut SubCb {

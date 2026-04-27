@@ -43,6 +43,62 @@ impl<T: UorbTopic> Publication<T> {
         self.ensure_advertised(initial as *const _ as *const c_void);
     }
 
+    /// Advertise on a specific multi-instance index. Returns the
+    /// instance PX4 actually assigned (which may differ from
+    /// `requested_instance` if it was already taken).
+    ///
+    /// Idempotent: a subsequent call on an already-advertised
+    /// `Publication` returns the originally-assigned instance and
+    /// doesn't re-advertise. Use [`unadvertise`](Self::unadvertise)
+    /// first if you need to swap instances.
+    pub fn advertise_multi(&self, initial: &T::Msg, requested_instance: i32) -> i32 {
+        if self.handle.load(Ordering::Acquire).is_null() {
+            let mut instance = requested_instance;
+            // SAFETY: metadata is a 'static reference; initial points
+            // at a valid T::Msg with matching size.
+            let h = unsafe {
+                ffi::advertise_multi(
+                    T::metadata(),
+                    initial as *const _ as *const c_void,
+                    &mut instance,
+                )
+            };
+            if self
+                .handle
+                .compare_exchange(
+                    core::ptr::null_mut(),
+                    h,
+                    Ordering::AcqRel,
+                    Ordering::Acquire,
+                )
+                .is_err()
+            {
+                // SAFETY: we just allocated h via advertise_multi.
+                unsafe { ffi::unadvertise(h) };
+            }
+            return instance;
+        }
+        // Already advertised. There's no cheap way to recover the
+        // assigned instance from PX4's broker, so we return the
+        // requested value unchanged — callers that need the precise
+        // assigned instance must capture it from this method's
+        // first successful call.
+        requested_instance
+    }
+
+    /// Explicitly unadvertise the topic, clearing the stored handle.
+    /// A subsequent `publish()` will lazily re-advertise on instance
+    /// 0. Equivalent to dropping the `Publication`, except the
+    /// `static` instance survives for re-use.
+    pub fn unadvertise(&self) {
+        let h = self.handle.swap(core::ptr::null_mut(), Ordering::AcqRel);
+        if !h.is_null() {
+            // SAFETY: we owned h until the swap; nobody else can
+            // observe it now.
+            unsafe { ffi::unadvertise(h) };
+        }
+    }
+
     fn ensure_advertised(&self, initial: *const c_void) {
         if self.handle.load(Ordering::Acquire).is_null() {
             // SAFETY: metadata is a 'static reference; initial points
