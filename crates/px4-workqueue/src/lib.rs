@@ -28,11 +28,14 @@
 mod atomic_waker;
 mod cell;
 mod ffi;
+mod hrt;
+mod timer;
 mod waker;
 mod wq;
 
 pub use atomic_waker::AtomicWaker;
 pub use cell::{SpawnError, SpawnToken, WorkItemCell};
+pub use timer::{Sleep, sleep};
 pub use wq::{WqConfig, wq_configurations};
 
 pub use px4_workqueue_macros::task;

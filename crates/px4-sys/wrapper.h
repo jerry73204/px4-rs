@@ -33,6 +33,10 @@ struct hrt_call {
 };
 
 hrt_abstime hrt_absolute_time(void);
+void        hrt_call_after(struct hrt_call *entry,
+                           hrt_abstime delay,
+                           void (*callout)(void *),
+                           void *arg);
 void        hrt_call_every(struct hrt_call *entry,
                            hrt_abstime delay,
                            hrt_abstime interval,

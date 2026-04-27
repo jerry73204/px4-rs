@@ -15,6 +15,14 @@ extern "C" {
     pub fn hrt_absolute_time() -> hrt_abstime;
 }
 extern "C" {
+    pub fn hrt_call_after(
+        entry: *mut hrt_call,
+        delay: hrt_abstime,
+        callout: ::core::option::Option<unsafe extern "C" fn(arg1: *mut ::core::ffi::c_void)>,
+        arg: *mut ::core::ffi::c_void,
+    );
+}
+extern "C" {
     pub fn hrt_call_every(
         entry: *mut hrt_call,
         delay: hrt_abstime,
