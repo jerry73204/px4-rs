@@ -1,0 +1,7 @@
+menuconfig MODULES_GYRO_WATCH
+	bool "gyro_watch (Rust example)"
+	default n
+	---help---
+		Phase-08 demo: subscribes to sensor_gyro on rate_ctrl,
+		looks for high-magnitude samples, and publishes a
+		GyroAlert each time a spike crosses the threshold.

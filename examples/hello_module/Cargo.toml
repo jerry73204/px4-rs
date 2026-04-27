@@ -1,0 +1,27 @@
+[package]
+name        = "hello_module"
+version     = "0.1.0"
+edition     = "2024"
+publish     = false
+description = "Phase-08 example — one #[task] that logs once a second via Sleep."
+
+[lib]
+crate-type = ["staticlib"]
+doctest    = false
+
+[dependencies]
+# Relative paths from this Cargo.toml. When copied out of the px4-rs
+# tree, rewrite these to point at wherever your px4-rs checkout lives.
+px4-log              = { path = "../../crates/px4-log" }
+px4-sys              = { path = "../../crates/px4-sys" }
+px4-workqueue        = { path = "../../crates/px4-workqueue" }
+px4-workqueue-macros = { path = "../../crates/px4-workqueue-macros" }
+
+[profile.release]
+panic     = "abort"
+opt-level = "s"
+lto       = "fat"
+strip     = "symbols"
+
+[profile.dev]
+panic = "abort"

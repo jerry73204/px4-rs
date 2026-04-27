@@ -1,0 +1,6 @@
+menuconfig MODULES_HELLO_MODULE
+	bool "hello_module (Rust example)"
+	default n
+	---help---
+		Phase-08 demo: one #[task] on lp_default that prints a
+		"hello" line once a second using px4_workqueue::sleep.

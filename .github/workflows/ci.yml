@@ -67,13 +67,28 @@ jobs:
 
       # Host-only members (proc-macros + codegen lib) can't compile
       # for bare-metal targets because their proc-macro2 dep needs std.
-      - run: |
+      - name: Cross-build workspace
+        run: |
           cargo build \
             --workspace --target ${{ matrix.target }} \
             --exclude xtask \
             --exclude px4-msg-codegen \
             --exclude px4-msg-macros \
             --exclude px4-workqueue-macros
+
+      # Examples live outside the workspace (each has its own Cargo.toml
+      # so users can copy one into their own EXTERNAL_MODULES_LOCATION
+      # without inheriting workspace coupling). Walk the directory and
+      # cross-build every one — phase-08 wants this enforced.
+      - name: Cross-build standalone examples
+        run: |
+          for dir in examples/*/; do
+            if [ -f "$dir/Cargo.toml" ]; then
+              echo "::group::cargo build --release ($dir → ${{ matrix.target }})"
+              (cd "$dir" && cargo build --release --target ${{ matrix.target }})
+              echo "::endgroup::"
+            fi
+          done
 
   # Snapshot freshness: shallow-clone the pinned PX4 tag, regenerate
   # crates/px4-sys/bindings/bindings.rs against it, and fail the build

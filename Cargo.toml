@@ -23,6 +23,9 @@ members = [
 exclude = [
     "examples/px4-rust-template",
     "examples/heartbeat",
+    "examples/hello_module",
+    "examples/gyro_watch",
+    "examples/multi_task",
     "tests/sitl",
 ]
 

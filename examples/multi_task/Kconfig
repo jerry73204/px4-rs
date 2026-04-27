@@ -1,0 +1,7 @@
+menuconfig MODULES_MULTI_TASK
+	bool "multi_task (Rust example)"
+	default n
+	---help---
+		Phase-08 demo: two #[task]s on different WorkQueues —
+		a producer on hp_default and a consumer on lp_default —
+		exchange wake-ups via px4_workqueue::Notify.

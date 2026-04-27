@@ -74,6 +74,25 @@ async fn rate_limit(mut g: Subscription<SensorGyro>,
 
 Depends on: `px4-workqueue`, `px4-uorb`, `px4-msg-macros`. No nano-ros.
 
+Three Style-A reference modules ship under `examples/`, each one
+exercising a different slice of the runtime:
+
+- [`examples/hello_module/`](../examples/hello_module/) — the smallest
+  thing that can be a PX4 Rust module. One `#[task]` on `lp_default`
+  that prints once a second via `px4_workqueue::sleep`. No uORB.
+- [`examples/multi_task/`](../examples/multi_task/) — two `#[task]`s
+  on different WorkQueues (a producer on `hp_default`, a consumer on
+  `lp_default`) coordinated by a single `Notify`. Demonstrates the
+  preferred PX4 idiom of putting time-driven nudging on a separate WQ
+  thread from the actual work.
+- [`examples/gyro_watch/`](../examples/gyro_watch/) — subscribes to
+  `sensor_gyro` and publishes a custom `gyro_alert` whenever the
+  rotation magnitude crosses a threshold. Exercises `Subscription` +
+  `Publication` + `#[px4_message]` codegen in one short task body.
+- [`examples/heartbeat/`](../examples/heartbeat/) — earlier
+  phase-07 reference for raw `Publication` use; kept around as the
+  smallest pub-only module.
+
 ### Style B — nano-ros callback API on PX4
 
 Executor lives inside a single `NrosWorkItem`; `Run()` calls

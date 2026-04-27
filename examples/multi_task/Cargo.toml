@@ -1,0 +1,25 @@
+[package]
+name        = "multi_task"
+version     = "0.1.0"
+edition     = "2024"
+publish     = false
+description = "Phase-08 example — two #[task]s on different WQs synchronised via Notify."
+
+[lib]
+crate-type = ["staticlib"]
+doctest    = false
+
+[dependencies]
+px4-log              = { path = "../../crates/px4-log" }
+px4-sys              = { path = "../../crates/px4-sys" }
+px4-workqueue        = { path = "../../crates/px4-workqueue" }
+px4-workqueue-macros = { path = "../../crates/px4-workqueue-macros" }
+
+[profile.release]
+panic     = "abort"
+opt-level = "s"
+lto       = "fat"
+strip     = "symbols"
+
+[profile.dev]
+panic = "abort"
