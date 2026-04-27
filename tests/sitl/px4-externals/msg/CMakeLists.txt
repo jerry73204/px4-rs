@@ -7,5 +7,9 @@
 # and subscriber live in different staticlibs.
 set(config_msg_list_external
     E2ePubsub.msg
+    # gyro_watch publishes `gyro_alert`, not in PX4's canonical
+    # message list. Bake it into the codegen so all consumers
+    # resolve through px4_rs_find_orb_meta to one canonical pointer.
+    GyroAlert.msg
     PARENT_SCOPE
 )
