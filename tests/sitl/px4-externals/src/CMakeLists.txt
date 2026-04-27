@@ -6,5 +6,6 @@ set(config_module_list_external
     modules/e2e_smoke
     modules/e2e_pubsub_pub
     modules/e2e_pubsub_sub
+    modules/e2e_panic
     PARENT_SCOPE
 )

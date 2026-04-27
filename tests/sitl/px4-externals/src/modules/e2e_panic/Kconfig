@@ -1,0 +1,8 @@
+menuconfig MODULES_E2E_PANIC
+	bool "e2e_panic (px4-rs phase-11 panic test)"
+	default y
+	---help---
+		Phase-11 SITL test module. On `start`, spawns a task
+		that panics on first poll, exercising the
+		px4_log::panic_handler!() install path. Pulled in only
+		by the tests/sitl/ external-modules tree.

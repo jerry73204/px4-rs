@@ -20,7 +20,7 @@
 
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -41,7 +41,7 @@ struct LogBuf {
 /// A live PX4 SITL daemon, plus enough plumbing to send it shell
 /// commands and tail its log.
 pub struct Px4Sitl {
-    child: Child,
+    child: Mutex<Child>,
     build_dir: PathBuf,
     log: Arc<LogBuf>,
 }
@@ -80,7 +80,7 @@ impl Px4Sitl {
         spawn_drainer(stderr, Arc::clone(&log));
 
         let sitl = Self {
-            child,
+            child: Mutex::new(child),
             build_dir: build_dir.clone(),
             log,
         };
@@ -162,11 +162,32 @@ impl Px4Sitl {
     pub fn bin_dir(&self) -> PathBuf {
         self.build_dir.join("bin")
     }
+
+    /// Block up to `timeout` waiting for the daemon to exit on its
+    /// own. Returns `Some(status)` if it did, `None` on timeout.
+    /// Used by the panic test to confirm a panic actually aborts the
+    /// process — every other test relies on `Drop` to kill it.
+    pub fn wait_for_exit(&self, timeout: Duration) -> Option<ExitStatus> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            {
+                let mut child = self.child.lock().unwrap();
+                if let Ok(Some(status)) = child.try_wait() {
+                    return Some(status);
+                }
+            }
+            if Instant::now() >= deadline {
+                return None;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
 }
 
 impl Drop for Px4Sitl {
     fn drop(&mut self) {
-        graceful_kill(&mut self.child, Duration::from_secs(3));
+        let mut child = self.child.lock().unwrap();
+        graceful_kill(&mut child, Duration::from_secs(3));
     }
 }
 
