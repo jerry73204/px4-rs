@@ -1,0 +1,27 @@
+[package]
+name        = "e2e_multi_wq"
+version     = "0.1.0"
+edition     = "2024"
+publish     = false
+description = "Phase-11 multi-WQ module: two tasks on different WorkQueues."
+
+[lib]
+crate-type = ["staticlib"]
+doctest    = false
+
+[dependencies]
+px4-log              = { path = "../../../../../../crates/px4-log" }
+px4-sys              = { path = "../../../../../../crates/px4-sys" }
+px4-uorb             = { path = "../../../../../../crates/px4-uorb" }
+px4-workqueue        = { path = "../../../../../../crates/px4-workqueue" }
+px4-workqueue-macros = { path = "../../../../../../crates/px4-workqueue-macros" }
+px4-msg-macros       = { path = "../../../../../../crates/px4-msg-macros" }
+
+[profile.release]
+panic     = "abort"
+opt-level = "s"
+lto       = "fat"
+strip     = "symbols"
+
+[profile.dev]
+panic = "abort"

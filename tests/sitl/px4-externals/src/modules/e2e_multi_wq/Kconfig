@@ -1,0 +1,8 @@
+menuconfig MODULES_E2E_MULTI_WQ
+	bool "e2e_multi_wq (px4-rs phase-11 multi-WQ test)"
+	default y
+	---help---
+		Phase-11 SITL test module. Two #[task] entries pinned
+		to different WorkQueues (`lp_default` and `hp_default`)
+		each emit their own log banner, demonstrating that the
+		runtime really does dispatch into multiple WQ threads.
