@@ -207,8 +207,11 @@ tails the daemon's stderr until a regex hits or timeout.
       (smoke), `Publication` (smoke), `Subscription` (pubsub),
       `panic_handler!()` (panic), multi-WorkQueue scheduling
       (multi_wq)
-- [ ] CI workflow stub committed (untested without a runner that has
-      PX4 + arm/posix toolchain — but documents the invocation)
+- [x] CI workflow committed at `.github/workflows/ci.yml`. SITL is
+      not driven from CI (no PX4 build env on the GitHub runners by
+      default), but the `cross-build` matrix covers the
+      thumbv7em/thumbv8m/riscv32imc target builds and the
+      `px4-sys-snapshot` job gates the bindings against PX4 v1.16.2.
 
 ## Out of scope
 

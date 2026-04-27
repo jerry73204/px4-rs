@@ -61,9 +61,15 @@ build:
     cargo build --workspace --all-targets
 
 # Build for a bare-metal target. Host test builds don't link the real
-# px4-sys — target builds do.
+# px4-sys — target builds do. The proc-macro and codegen crates can't
+# compile against no_std targets (proc-macro2 needs std), so they're
+# excluded from the target build.
 build-target TARGET:
-    cargo build --workspace --target {{TARGET}} --exclude xtask
+    cargo build --workspace --target {{TARGET}} \
+        --exclude xtask \
+        --exclude px4-msg-codegen \
+        --exclude px4-msg-macros \
+        --exclude px4-workqueue-macros
 
 test:
     cargo test --workspace --all-targets

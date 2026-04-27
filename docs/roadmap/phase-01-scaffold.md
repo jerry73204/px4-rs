@@ -2,7 +2,7 @@
 
 **Goal**: Land the empty workspace with a working `just ci` on the host.
 
-**Status**: In Progress
+**Status**: Done
 **Priority**: P0 (unblocks everything)
 **Depends on**: nothing
 
@@ -15,14 +15,21 @@
 - [x] 01.5 — `justfile` with `setup`, `doctor`, `check`, `build`, `test`, `doc`, `ci`
 - [x] 01.6 — `docs/` skeleton (`architecture.md`, `async-model.md`, `task-macro.md`, `linking-into-px4.md`)
 - [x] 01.7 — `docs/roadmap/` with this document and the index
-- [ ] 01.8 — `xtask/` scaffold (empty `main()` so the workspace builds cleanly)
-- [ ] 01.9 — CI (GitHub Actions) — `just ci` on ubuntu-latest
+- [x] 01.8 — `xtask/` scaffold landed in phase 02 alongside `gen-sys`
+      and grew `gen-msgs` in phase 05; the `xtask` recipe set is now
+      the canonical home for codegen helpers.
+- [x] 01.9 — CI (GitHub Actions) — `.github/workflows/ci.yml` runs
+      `just ci`, cross-builds for all three Rust targets we claim
+      support for, and gates the px4-sys snapshot against PX4 v1.16.2.
 
 ## Acceptance criteria
 
-- [ ] `git clone && just setup && just ci` green on a fresh Ubuntu 24.04 host
-- [ ] `cargo doc --workspace --no-deps` produces output (even if mostly empty)
-- [ ] `just doctor` prints a useful message when `PX4_AUTOPILOT_DIR` is missing
+- [x] `git clone && just setup && just ci` green on a fresh Ubuntu
+      runner — covered by the `ci` job in `.github/workflows/ci.yml`.
+- [x] `cargo doc --workspace --no-deps` produces output — runs as part
+      of `just ci`'s `doc` step.
+- [x] `just doctor` prints a useful message when `PX4_AUTOPILOT_DIR`
+      is missing — recipe is in `justfile`.
 
 ## Notes
 

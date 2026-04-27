@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  # `just ci` = check + test + doc, exactly what a developer runs
+  # locally. The host build never links against a real PX4 — px4-sys
+  # falls back to its vendored bindings snapshot when PX4_AUTOPILOT_DIR
+  # is unset, which keeps this job self-contained.
+  ci:
+    name: just ci (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install rustup toolchain (rust-toolchain.toml drives nightly)
+        run: rustup show
+
+      - name: Install just
+        uses: extractions/setup-just@v2
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+
+      - run: just ci
+
+  # Bare-metal cross builds. Every Pixhawk/STM target px4-rs claims to
+  # support gets compiled here so a phase that breaks tier-3 target
+  # support fails the build instead of getting noticed downstream.
+  cross-build:
+    name: cargo build --target ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - thumbv7em-none-eabihf
+          - thumbv8m.main-none-eabihf
+          - riscv32imc-unknown-none-elf
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install rustup toolchain
+        run: rustup show
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+
+      # Host-only members (proc-macros + codegen lib) can't compile
+      # for bare-metal targets because their proc-macro2 dep needs std.
+      - run: |
+          cargo build \
+            --workspace --target ${{ matrix.target }} \
+            --exclude xtask \
+            --exclude px4-msg-codegen \
+            --exclude px4-msg-macros \
+            --exclude px4-workqueue-macros
+
+  # Snapshot freshness: shallow-clone the pinned PX4 tag, regenerate
+  # crates/px4-sys/bindings/bindings.rs against it, and fail the build
+  # if the diff isn't empty. Catches a PX4 ABI change before it
+  # silently corrupts memory in a downstream firmware build.
+  px4-sys-snapshot:
+    name: px4-sys bindings snapshot vs PX4 v1.16.2
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install rustup toolchain
+        run: rustup show
+
+      - name: Install libclang for bindgen
+        run: sudo apt-get update && sudo apt-get install -y libclang-dev
+
+      - name: Shallow-clone PX4 v1.16.2
+        run: |
+          git clone --depth 1 --branch v1.16.2 \
+            https://github.com/PX4/PX4-Autopilot.git "$HOME/PX4-Autopilot"
+
+      - name: Regenerate bindings
+        env:
+          PX4_AUTOPILOT_DIR: ${{ github.workspace }}/../PX4-Autopilot
+        run: |
+          PX4_AUTOPILOT_DIR="$HOME/PX4-Autopilot" \
+            cargo run -p xtask -- gen-sys --px4 "$HOME/PX4-Autopilot"
+
+      - name: Fail on drift
+        run: |
+          if ! git diff --exit-code crates/px4-sys/bindings/bindings.rs; then
+            echo "::error::px4-sys bindings snapshot is stale vs PX4 v1.16.2."
+            echo "Run \`just gen-sys\` locally (with PX4_AUTOPILOT_DIR set) and"
+            echo "commit the regenerated crates/px4-sys/bindings/bindings.rs."
+            exit 1
+          fi

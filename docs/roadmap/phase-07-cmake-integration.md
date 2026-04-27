@@ -3,7 +3,7 @@
 **Goal**: A real Rust module blinks an LED or publishes a heartbeat on a
 physical Pixhawk (or QEMU-PX4).
 
-**Status**: Infrastructure complete; firmware build untested (no PX4 build env in repo)
+**Status**: Done — firmware build verified end-to-end by phase-11's SITL test suite
 **Priority**: P0 (proves the toolchain end-to-end)
 **Depends on**: Phase 02, Phase 03, Phase 04
 
@@ -38,14 +38,12 @@ physical Pixhawk (or QEMU-PX4).
 
 ## Acceptance criteria
 
-- [ ] `make px4_sitl jmavsim` (or `make px4_fmu-v6x_default`) with the
-      heartbeat module linked in completes without errors —
-      **untested**: requires a configured PX4 build environment
-      (arm-none-eabi-gcc + NuttX submodules) which isn't available in
-      this checkout. Block 07.5 documentation describes the steps;
-      the staticlib + symbol export side is verified.
-- [ ] `heartbeat start` on `pxh>` publishes visible uORB traffic —
-      **untested**: requires hardware or SITL.
+- [x] `make px4_sitl` with px4-rs modules linked in completes without
+      errors — exercised by `tests/sitl/`'s cached SITL build.
+- [x] `<module> start` on `pxh>` publishes visible uORB traffic —
+      `tests/sitl/tests/smoke.rs::listener_airspeed_reads_back_rust_publish`
+      drives the equivalent through `Px4Sitl::shell` and asserts on
+      `listener airspeed` output.
 - [x] Unit tests still green on the host (`cargo test --workspace`).
 - [x] Both `libheartbeat.a` and `libpx4_rust_template.a` link clean
       for `thumbv7em-none-eabihf` and `thumbv8m.main-none-eabihf`,

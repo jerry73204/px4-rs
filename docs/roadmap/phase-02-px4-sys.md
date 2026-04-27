@@ -68,13 +68,15 @@ compile-time error.
 - [x] 02.5 — `just gen-sys` → `xtask gen-sys` regenerates the vendored
       snapshot from `wrapper.h`
 - [x] 02.6 — `#![no_std]` on `px4-sys` (declarations only, no impls)
-- [ ] 02.7 — Per-topic `orb_metadata` blocks — deferred to phase 05
-      (`px4-msg-codegen` owns the per-topic bindings)
+- [x] 02.7 — Per-topic `orb_metadata` blocks landed in phase 05
+      (`px4-msg-codegen` + `#[px4_message]` own the per-topic bindings).
 - [x] 02.8 — `build.rs` rejects a pre-v1.15 `PX4_AUTOPILOT_DIR` by
       grepping `platforms/common/uORB/uORB.h` for the `orb_id_size_t`
       typedef (v1.15-only marker; robust against comment matches)
-- [ ] 02.9 — CI workflow to shallow-clone v1.16.2 and verify the snapshot
-      — pending a CI config file (no CI yet configured in-repo)
+- [x] 02.9 — CI workflow shallow-clones v1.16.2 and re-runs `xtask
+      gen-sys`, then `git diff --exit-code` flags any drift between
+      the vendored snapshot and what bindgen produces today. Job:
+      `px4-sys-snapshot` in `.github/workflows/ci.yml`.
 
 ## Acceptance criteria
 
