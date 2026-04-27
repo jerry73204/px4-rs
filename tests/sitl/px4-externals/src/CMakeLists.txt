@@ -4,5 +4,7 @@
 # this `src/` that PX4 will pull in.
 set(config_module_list_external
     modules/e2e_smoke
+    modules/e2e_pubsub_pub
+    modules/e2e_pubsub_sub
     PARENT_SCOPE
 )

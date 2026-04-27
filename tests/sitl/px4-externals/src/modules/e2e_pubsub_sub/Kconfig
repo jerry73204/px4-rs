@@ -1,0 +1,8 @@
+menuconfig MODULES_E2E_PUBSUB_SUB
+	bool "e2e_pubsub_sub (px4-rs phase-11 pub/sub subscriber)"
+	default y
+	---help---
+		Phase-11 SITL test module. Subscribes to the E2ePubsub
+		topic published by e2e_pubsub_pub and logs each received
+		sample. Pulled in only by the tests/sitl/ external-modules
+		tree.

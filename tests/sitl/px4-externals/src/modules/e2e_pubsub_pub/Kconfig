@@ -1,0 +1,7 @@
+menuconfig MODULES_E2E_PUBSUB_PUB
+	bool "e2e_pubsub_pub (px4-rs phase-11 pub/sub publisher)"
+	default y
+	---help---
+		Phase-11 SITL test module. Publishes an incrementing
+		E2ePubsub topic each iteration of one #[task]. Pulled in
+		only by the tests/sitl/ external-modules tree.
