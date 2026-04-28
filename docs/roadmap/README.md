@@ -17,4 +17,5 @@ complete; move finished phases to `archived/`.
 | 09 | Host-side mock + unit tests | Done — multi-OS CI matrix |
 | 10 | Documentation polish + crates.io publish | Not Started |
 | 11 | SITL end-to-end test infrastructure | Done — 12 tests warm |
-| 12 | `px4` umbrella crate + `#[px4::main]` | Not Started |
+| 12 | `px4` umbrella crate + `#[px4::main]` | Done |
+| 13 | Renode + NuttX e2e test track | Not Started |
