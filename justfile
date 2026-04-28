@@ -139,6 +139,17 @@ test-sitl:
 test-renode:
     cd tests/renode && cargo nextest run
 
+# Validate the Renode platform .repl by loading it into a real
+# Renode and quitting. Faster + simpler than `test-renode` —
+# doesn't need PX4_RENODE_FIRMWARE — and catches .repl parse
+# errors immediately. Requires `just setup-renode` first.
+lint-renode-platform:
+    @command -v renode >/dev/null \
+        || { echo "renode not on PATH — run \`just setup-renode\`"; exit 1; }
+    renode --console --plain --disable-xwt -e 'mach create "lint"; \
+        machine LoadPlatformDescription @tests/renode/platforms/px4_renode_h743.repl; \
+        quit'
+
 # ---------------------------------------------------------------------------
 # Docs
 # ---------------------------------------------------------------------------

@@ -5,7 +5,7 @@ Cortex-M and runs the same `e2e_*` test bodies that
 `tests/sitl/` already runs against POSIX SITL. Closes the ARM-codegen
 + NuttX-scheduler + interrupt-timing gap that POSIX SITL leaves open.
 
-**Status**: Infrastructure landed; firmware-build (13.1) deferred
+**Status**: Infrastructure + live-probe coverage landed; firmware-build (13.1) deferred
 **Priority**: P1 (any phase that changes the runtime should run on
 a target-shaped substrate before merge)
 **Depends on**: Phase 11 (the SITL fixture shape we mirror), Phase 12
@@ -160,6 +160,10 @@ poll — can't happen here. Two sub-benefits:
       master tail thread, RAII teardown via SIGTERM-then-SIGKILL.
       Compiles clean; tests skip-pass without `RENODE` /
       `PX4_RENODE_FIRMWARE`.
+      Also ships [`probe_platform`] + the lighter
+      `ensure_renode_binary!()` macro: a non-interactive
+      Renode-spawn that loads the `.repl` and quits, used by
+      `tests/probe.rs` for live coverage that doesn't need 13.1.
 - [ ] **13.5** — Reuse `tests/sitl/px4-externals/`. Plumbed once
       13.1 lands; trivial once the firmware build is in place.
 - [ ] **13.6** — Port the existing test bodies. Two are stubbed in
@@ -168,11 +172,12 @@ poll — can't happen here. Two sub-benefits:
       port wholesale once the firmware actually boots on Renode.
       Timer-bound ones may want a Renode-time-advance helper.
 - [x] **13.7** — CI track. `renode-e2e` job in
-      `.github/workflows/ci.yml` always runs and verifies the
-      fixture compiles + the smoke tests pass on the skip path.
-      The follow-up step that pulls Antmicro's Renode Docker image
-      and runs the actual emulation lands once 13.1 produces a
-      firmware artifact.
+      `.github/workflows/ci.yml` runs `just setup-renode`
+      (installing the pinned `.deb`), then `cargo test` against
+      `tests/renode/`. With `RENODE` set, `tests/probe.rs`
+      executes live and exercises the `.repl` parse path; with
+      `PX4_RENODE_FIRMWARE` still unset, `tests/smoke.rs` keeps
+      skipping until 13.1 produces a firmware artifact.
 - [x] **13.8** — Documentation. `tests/renode/README.md` covers
       local setup; `docs/linking-into-px4.md` gains a section
       pointing at the second e2e tier; the roadmap index lists

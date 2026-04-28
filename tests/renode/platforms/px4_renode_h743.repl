@@ -1,33 +1,15 @@
 // PX4 Renode platform — STM32H743-based, modelled on Pixhawk FMU-v6X.
 //
-// Extends Renode's stock `stm32h743.repl` (cloned to
-// external/renode/platforms/cpus/stm32h743.repl for reference) with
-// just enough peripherals for PX4 + NuttX to come up:
+// The CPU/NVIC/MPU/USARTs/RAM/flash all live in Renode's stock
+// `stm32h743.repl` already; we just `using` it. Per-test attachment
+// of USART2 to a host pty is done at run-time by the companion
+// `.resc` script — that's a connector binding, not a platform
+// description.
 //
-//   * Cortex-M7 + NVIC + MPU (inherited from the stock file)
-//   * SysTick (inherited)
-//   * USART2 — used for the pxh shell over UART
-//   * The standard SRAM + flash banks (inherited)
-//
-// Drivers Renode doesn't model and PX4 doesn't need on this board:
-// I2C, SPI, ADC, timers beyond systick, DMA, USB, ETH, FDCAN. The
-// PX4 board config strips them out at the Kconfig level so the
-// firmware never exercises them.
-//
-// Lineage of this file:
-// - Vendored fragment of Renode's MIT-licensed stm32h743.repl —
-//   keep the upstream copyright header below.
-// - Local additions follow the BSD-3-Clause of the surrounding
-//   px4-rs tree.
-
-// SPDX-License-Identifier: MIT
-// Copyright (c) 2010-2024 Antmicro
-// (Vendored from renode/platforms/cpus/stm32h743.repl; trimmed.)
+// This file is intentionally a thin extension point. Add overrides
+// only when a particular phase-13 test needs a peripheral the stock
+// platform doesn't model — for example, a fake sensor on SPI to
+// drive `gyro_watch`'s spike detection. Until then, the upstream
+// description is exactly what we want.
 
 using "platforms/cpus/stm32h743.repl"
-
-// `usart2` already exists in the upstream repl. We rebind its
-// backing here so the .resc script can attach a host-side terminal
-// (a pty) to it.
-usart2:
-    -> nvic@38

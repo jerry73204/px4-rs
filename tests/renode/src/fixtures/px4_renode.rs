@@ -14,9 +14,9 @@
 //! Runtime model
 //! -------------
 //! - `boot()` allocates a pty pair, spawns `renode --console -e
-//!   "include @<resc>"`, and points the firmware's UART2 at the
-//!   pty slave via the `.resc` script. The host opens the pty
-//!   master and tails it.
+//!   "$bin=…; $slave=…; include @<resc>"`, and points the
+//!   firmware's UART2 at the pty slave via the `.resc` script. The
+//!   host opens the pty master and tails it.
 //! - `shell(cmd)` writes `cmd\r\n` to the pty and reads until the
 //!   `pxh>` prompt comes back. The pxh shell loop in PX4's posix
 //!   build is reused on NuttX with the same prompt string.
@@ -30,12 +30,13 @@
 //! --------------
 //! [`renode_available`] returns `false` (and the [`crate::ensure_renode!`]
 //! macro skip-returns) when either `RENODE` (the binary path) or
-//! `PX4_RENODE_FIRMWARE` (the .elf to boot) is missing. Mirrors
-//! `tests/sitl/`'s `ensure_px4!()` pattern, so the suite reports
-//! `[SKIPPED]` cleanly when phase-13 prerequisites aren't installed.
+//! `PX4_RENODE_FIRMWARE` (the .elf to boot) is missing. The lighter
+//! [`renode_binary_available`] only requires `RENODE`; tests that
+//! exercise the platform file without needing firmware (see
+//! [`Px4RenodeSitl::probe_platform`]) gate on that instead.
 
 use std::io::{BufRead, BufReader, Write};
-use std::os::fd::{AsFd, IntoRawFd};
+use std::os::fd::{AsFd, FromRawFd, IntoRawFd};
 use std::path::PathBuf;
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::{Arc, Condvar, Mutex};
@@ -90,30 +91,16 @@ impl Px4RenodeSitl {
         // re-opens the slave by name from the .resc.
         drop(slave);
 
-        // Renode invocation:
-        //   --console — keep stdout/err attached so we can see
-        //               Renode's own diagnostics if a test wedges.
-        //   --plain   — disable ANSI escapes / monitor prompt clutter.
-        //   --disable-xwt — headless.
-        //   -e <command> — initial monitor command, runs the .resc.
+        // The .resc reads `$slave` and `$bin` as Renode-side variables
+        // we set on the command line. Quoting matters — Renode's
+        // monitor parser is whitespace-sensitive.
         let exec = format!(
-            "$slave=\"{slave}\"; include @{resc}",
+            "$slave=\"{slave}\"; $bin=@{bin}; include @{resc}",
             slave = slave_path.display(),
+            bin = firmware.display(),
             resc = resc.display(),
         );
-        let mut cmd = Command::new(&renode);
-        cmd.arg("--console")
-            .arg("--plain")
-            .arg("--disable-xwt")
-            .arg("-e")
-            .arg(&exec)
-            .env("PX4_RENODE_FIRMWARE", &firmware)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .stdin(Stdio::null());
-        set_new_process_group(&mut cmd);
-
-        let mut child = cmd.spawn()?;
+        let mut child = spawn_renode(&renode, &exec)?;
 
         // Drain Renode's own stdout + stderr for diagnostics.
         let log = Arc::new(LogBuf::default());
@@ -224,10 +211,88 @@ impl Drop for Px4RenodeSitl {
     }
 }
 
-/// Return `true` iff both `RENODE` (binary) and `PX4_RENODE_FIRMWARE`
-/// (.elf path) point at existing files.
+/// Outcome of a [`probe_platform`] run.
+#[derive(Debug, Clone)]
+pub struct ProbeOutcome {
+    /// Renode's combined stdout + stderr.
+    pub renode_log: String,
+    /// Renode's exit status. `Some` iff Renode quit within the
+    /// probe's timeout.
+    pub status: Option<ExitStatus>,
+}
+
+/// Spawn Renode, load the platform `.repl`, and quit. Verifies
+/// that Renode + the platform description parse cleanly without
+/// requiring a firmware ELF.
+///
+/// The probe is non-interactive — no pty, no UART, no shell. It
+/// returns once Renode exits, or after `timeout`. Useful as a
+/// continuously-runnable smoke even before phase-13's firmware
+/// build (work item 13.1) lands.
+///
+/// Gates on [`renode_binary_available`], not [`renode_available`].
+pub fn probe_platform(timeout: Duration) -> Result<ProbeOutcome> {
+    let renode = renode_binary()?;
+    let repl = repl_path();
+
+    // Load + immediately quit. Any parse error in the .repl falls
+    // out of Renode as a non-zero exit + a stderr line we capture.
+    let exec = format!(
+        "mach create \"probe\"; machine LoadPlatformDescription @{repl}; quit",
+        repl = repl.display(),
+    );
+
+    let mut child = spawn_renode(&renode, &exec)?;
+    let log = Arc::new(LogBuf::default());
+    if let Some(out) = child.stdout.take() {
+        spawn_drainer(out, Arc::clone(&log), "renode-stdout");
+    }
+    if let Some(err) = child.stderr.take() {
+        spawn_drainer(err, Arc::clone(&log), "renode-stderr");
+    }
+
+    let deadline = Instant::now() + timeout;
+    let status = loop {
+        if let Ok(Some(s)) = child.try_wait() {
+            break Some(s);
+        }
+        if Instant::now() >= deadline {
+            graceful_kill(&mut child, Duration::from_secs(2));
+            break None;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    };
+
+    let renode_log = log.text.lock().unwrap().clone();
+    Ok(ProbeOutcome { renode_log, status })
+}
+
+/// Spawn `renode --console --plain --disable-xwt -e <exec>` with
+/// stdout/stderr piped + its own process group. Shared by `boot()`
+/// and `probe_platform()`.
+fn spawn_renode(renode: &PathBuf, exec: &str) -> Result<Child> {
+    let mut cmd = Command::new(renode);
+    cmd.arg("--console")
+        .arg("--plain")
+        .arg("--disable-xwt")
+        .arg("-e")
+        .arg(exec)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .stdin(Stdio::null());
+    set_new_process_group(&mut cmd);
+    Ok(cmd.spawn()?)
+}
+
+/// `RENODE` and `PX4_RENODE_FIRMWARE` both point at existing files.
+/// Required for [`Px4RenodeSitl::boot`].
 pub fn renode_available() -> bool {
     renode_binary().is_ok() && firmware_path().is_ok()
+}
+
+/// Just `RENODE`. Sufficient for [`probe_platform`].
+pub fn renode_binary_available() -> bool {
+    renode_binary().is_ok()
 }
 
 fn renode_binary() -> Result<PathBuf> {
@@ -255,6 +320,12 @@ fn resc_path() -> PathBuf {
     manifest.join("platforms").join("px4_renode_h743.resc")
 }
 
+/// Path to the bundled `.repl` platform description.
+fn repl_path() -> PathBuf {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    manifest.join("platforms").join("px4_renode_h743.repl")
+}
+
 /// Resolve the slave-side device path of a pty fd.
 fn pty_path(fd: std::os::fd::BorrowedFd<'_>) -> Result<PathBuf> {
     use nix::unistd::ttyname;
@@ -266,7 +337,11 @@ fn find_line(buf: &str, pat: &str) -> Option<String> {
     buf.lines().find(|l| l.contains(pat)).map(str::to_string)
 }
 
-fn spawn_drainer<R: std::io::Read + Send + 'static>(reader: R, log: Arc<LogBuf>, tag: &'static str) {
+fn spawn_drainer<R: std::io::Read + Send + 'static>(
+    reader: R,
+    log: Arc<LogBuf>,
+    tag: &'static str,
+) {
     thread::spawn(move || {
         let buf = BufReader::new(reader);
         for line in buf.lines() {
@@ -281,6 +356,3 @@ fn spawn_drainer<R: std::io::Read + Send + 'static>(reader: R, log: Arc<LogBuf>,
         }
     });
 }
-
-// `OwnedFd` → `std::fs::File` conversion needs `FromRawFd`.
-use std::os::fd::FromRawFd;

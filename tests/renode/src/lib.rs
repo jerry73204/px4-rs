@@ -38,7 +38,7 @@ macro_rules! skip {
 /// or `PX4_RENODE_FIRMWARE` (path to the px4 .elf to boot) is not
 /// configured.
 ///
-/// Use at the top of every Renode test:
+/// Use at the top of every full-boot Renode test:
 ///
 /// ```ignore
 /// #[test]
@@ -56,6 +56,21 @@ macro_rules! ensure_renode {
                 "RENODE / PX4_RENODE_FIRMWARE not set or missing — \
                  see docs/roadmap/phase-13-renode-nuttx-e2e.md for setup"
             );
+        }
+    };
+}
+
+/// Lighter sibling of [`ensure_renode!`]: skip only if `RENODE`
+/// (the binary path) is missing. Tests that exercise the
+/// `.repl` / `.resc` plumbing without booting firmware — see
+/// [`fixtures::probe_platform`] — should gate on this. Lets
+/// platform-load smoke tests run live as soon as Renode itself is
+/// installed, without waiting on phase-13 work item 13.1.
+#[macro_export]
+macro_rules! ensure_renode_binary {
+    () => {
+        if !$crate::fixtures::renode_binary_available() {
+            $crate::skip!("RENODE not set or missing — `just setup-renode` to install");
         }
     };
 }

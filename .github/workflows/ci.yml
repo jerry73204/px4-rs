@@ -142,22 +142,28 @@ jobs:
             exit 1
           fi
 
-  # Phase-13 Renode + NuttX e2e suite. The Rust fixture compiles
-  # always; the actual test bodies skip-return via `ensure_renode!()`
-  # unless both `RENODE` and `PX4_RENODE_FIRMWARE` are set. This job
-  # confirms the fixture builds clean on every push and that the
-  # smoke tests pass in their skip path. Once work item 13.1 lands
-  # (the px4_renode_h743 PX4 board config), this job grows a step
-  # that runs the Antmicro Renode Docker action against a built
-  # firmware artifact.
+  # Phase-13 Renode + NuttX e2e suite. Two live cohorts plus a
+  # skip-path cohort:
+  #
+  #   * tests/probe.rs   — live, gates only on RENODE. Loads the
+  #                        platform .repl into a real Renode and
+  #                        verifies it parses cleanly. Catches
+  #                        regressions in our platform file the
+  #                        moment they land.
+  #   * tests/smoke.rs   — gates on RENODE + PX4_RENODE_FIRMWARE.
+  #                        Skips here until 13.1 (PX4 board config)
+  #                        produces a firmware artifact.
   renode-e2e:
-    name: tests/renode (skip-path)
+    name: tests/renode (live probe)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Install rustup toolchain
         run: rustup show
+
+      - name: Install just
+        uses: extractions/setup-just@v2
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -168,10 +174,13 @@ jobs:
             tests/renode/target
           key: cargo-renode-${{ runner.os }}-${{ hashFiles('tests/renode/Cargo.lock', 'rust-toolchain.toml') }}
 
-      - name: Build the renode fixture crate
-        run: cd tests/renode && cargo build
+      - name: Install Renode at the pinned version
+        run: just setup-renode
 
-      - name: Run the renode test suite (skip path)
-        # Without RENODE / PX4_RENODE_FIRMWARE, every test is
-        # expected to print [SKIPPED] and exit zero.
+      - name: Run tests/renode (live for probe, skip for smoke)
+        # `RENODE` lets `tests/probe.rs` actually exercise Renode +
+        # the platform .repl; `PX4_RENODE_FIRMWARE` is intentionally
+        # unset so `tests/smoke.rs` skips until phase-13.1 ships.
+        env:
+          RENODE: /usr/bin/renode
         run: cd tests/renode && cargo test
