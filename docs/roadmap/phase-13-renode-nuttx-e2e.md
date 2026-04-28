@@ -5,7 +5,7 @@ Cortex-M and runs the same `e2e_*` test bodies that
 `tests/sitl/` already runs against POSIX SITL. Closes the ARM-codegen
 + NuttX-scheduler + interrupt-timing gap that POSIX SITL leaves open.
 
-**Status**: Infrastructure + live-probe coverage landed; firmware-build (13.1) deferred
+**Status**: Infrastructure + live NuttX-on-H743 boot proven; full PX4 firmware (13.1) tracked separately
 **Priority**: P1 (any phase that changes the runtime should run on
 a target-shaped substrate before merge)
 **Depends on**: Phase 11 (the SITL fixture shape we mirror), Phase 12
@@ -134,18 +134,31 @@ poll — can't happen here. Two sub-benefits:
 
 ## Work items
 
-- [ ] **13.1** — `px4_renode_h743` PX4 board config. Branched from
-      `boards/px4/fmu-v6x/default.px4board`, sensor + actuator
-      drivers stripped, NuttX defconfig adjusted with
-      `CONFIG_STM32H7_PWR_IGNORE_ACTVOSRDY=y` + the BASEPRI WAR
-      NuttX's Renode guide flags. `make px4_renode_h743_default`
-      produces a `.elf` Renode can load.
-      **Deferred — biggest unknown.** Phase 13's other items can
-      land independently because they all skip-detect when the
-      firmware artifact is missing (via `ensure_renode!()`); 13.1
-      itself is genuine board-config + Kconfig surgery on the
-      order of a few days. Pick this up when there's bandwidth to
-      iterate against a local Renode install.
+- [/] **13.1-lite** — Stock NuttX `nucleo-h743zi:nsh` boots on
+      Renode, validated end-to-end. Path:
+      `tools/configure.sh nucleo-h743zi:nsh` + add
+      `CONFIG_STM32H7_PWR_IGNORE_ACTVOSRDY=y` (note: this flag
+      doesn't actually exist in PX4's NuttX fork — handled via a
+      Renode-side PWR mock instead, see below) + `make`. Result:
+      `nuttx` ELF (~1.3 MB) that Renode loads and runs through to
+      NuttX's `NuttShell` banner + `nsh>` prompt in 1.7 s warm.
+      The `tests/renode/tests/smoke.rs::fixture_boots_to_nuttx_banner`
+      test gates the boot path — passes live in CI when
+      `PX4_RENODE_FIRMWARE` is set to the NuttX ELF.
+- [ ] **13.1** — Full PX4-on-NuttX board config (`px4_renode_h743`):
+      a custom PX4 board branched from `boards/px4/fmu-v6x/`,
+      sensor + actuator drivers stripped, NuttX defconfig from the
+      working 13.1-lite baseline. Once it produces a firmware,
+      `tests/renode/tests/pxh.rs` gates flip to live — the gating
+      env var is `PX4_RENODE_HAS_PX4=1` (uorb / shell tests).
+      **Open issue blocking shell-driven tests on bare NuttX**:
+      stock `nucleo-h743zi:nsh` panics shortly after the prompt
+      via `irq_unexpected_isr → PANIC()` on IRQ 120 (MDIOS) — an
+      interrupt Renode's STM32H7 model fires from reset-default
+      state that NuttX hasn't registered a handler for. PX4 board
+      configs can disable MDIOS at the Kconfig level, dodging the
+      issue. Tracked here rather than as a blocker for
+      infrastructure validation.
 - [x] **13.2** — `tests/renode/` workspace skeleton: standalone
       `Cargo.toml`, `rust-toolchain.toml`, `.config/nextest.toml`
       with a `renode` test-group capped at 1 thread.

@@ -36,24 +36,31 @@
 //! [`Px4RenodeSitl::probe_platform`]) gate on that instead.
 
 use std::io::{BufRead, BufReader, Write};
-use std::os::fd::{AsFd, FromRawFd, IntoRawFd};
 use std::path::PathBuf;
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use nix::pty::{OpenptyResult, openpty};
-
 use crate::process::{graceful_kill, set_new_process_group};
 use crate::{Result, TestError};
 
-/// Default Renode boot deadline. PX4 + NuttX start cold in 10–30 s
-/// of virtual time on Renode; allow headroom.
-const BOOT_TIMEOUT: Duration = Duration::from_secs(60);
+/// Default Renode boot deadline. NuttX/PX4 cold-start in well under
+/// a second of virtual time on Renode; the wall-clock budget is
+/// dominated by Renode itself starting up. 30 s is generous.
+const BOOT_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// PX4's pxh prompt. Matches POSIX SITL and NuttX builds verbatim.
-const PXH_PROMPT: &str = "pxh>";
+/// Boot signature: NuttX prints this banner once the kernel hits
+/// userspace. Works for both bare-NuttX (nsh) and PX4-on-NuttX
+/// firmware. The POSIX SITL fixture uses a different banner
+/// ("Startup script returned successfully") because POSIX SITL
+/// runs PX4's pxh shell directly, not via NuttX.
+const BOOT_BANNER: &str = "NuttShell";
+
+/// Shell prompt for both bare-NuttX and PX4-on-NuttX. PX4's pxh on
+/// POSIX uses `pxh>`; on NuttX targets PX4 leaves the stock NuttX
+/// prompt in place.
+const NSH_PROMPT: &str = "nsh>";
 
 /// Shared between the pty drainer thread and the test thread.
 #[derive(Default)]
@@ -68,6 +75,9 @@ pub struct Px4RenodeSitl {
     /// pty master file descriptor; we own it for the duration of the
     /// fixture and write subcommands to it.
     pty_master: Mutex<std::fs::File>,
+    /// Symlink Renode created. Cleaned up on Drop so successive
+    /// tests don't collide.
+    pty_path: PathBuf,
     log: Arc<LogBuf>,
 }
 
@@ -80,24 +90,28 @@ impl Px4RenodeSitl {
         let renode = renode_binary()?;
         let firmware = firmware_path()?;
         let resc = resc_path();
+        let repl = repl_path();
 
-        // Allocate a pty. The slave path goes into the .resc as the
-        // UART backing; the master fd stays here so we can drive
-        // the shell. Resolve the slave path *before* consuming the
-        // slave fd — `ttyname` borrows a `BorrowedFd`.
-        let OpenptyResult { master, slave } = openpty(None, None).map_err(TestError::Nix)?;
-        let slave_path = pty_path(slave.as_fd())?;
-        // Slave fd can drop now; the path lives on its own. Renode
-        // re-opens the slave by name from the .resc.
-        drop(slave);
+        // Pick a unique pty-master symlink path Renode will create.
+        // Renode's `CreateUartPtyTerminal` allocates its own pty pair
+        // internally and symlinks the master end at this path —
+        // it's an OUTPUT path, not a pre-existing one.
+        let pid = std::process::id();
+        let nonce = Instant::now().elapsed().subsec_nanos();
+        let slave_path: PathBuf = format!("/tmp/renode-pty-{pid}-{nonce}").into();
+        // Make sure no stale symlink lingers from a previous run.
+        let _ = std::fs::remove_file(&slave_path);
 
-        // The .resc reads `$slave` and `$bin` as Renode-side variables
-        // we set on the command line. Quoting matters — Renode's
-        // monitor parser is whitespace-sensitive.
+        // The .resc reads `$slave`, `$bin`, and `$repl` as
+        // Renode-side variables we set on the command line.
+        // Quoting matters — Renode's monitor parser is
+        // whitespace-sensitive. `@<abs path>` resolves to the
+        // file directly without needing PATH config.
         let exec = format!(
-            "$slave=\"{slave}\"; $bin=@{bin}; include @{resc}",
+            "$slave=\"{slave}\"; $bin=@{bin}; $repl=@{repl}; include @{resc}",
             slave = slave_path.display(),
             bin = firmware.display(),
+            repl = repl.display(),
             resc = resc.display(),
         );
         let mut child = spawn_renode(&renode, &exec)?;
@@ -111,21 +125,41 @@ impl Px4RenodeSitl {
             spawn_drainer(err, Arc::clone(&log), "renode-stderr");
         }
 
-        // Open the master end as a normal file. Spawn another
-        // drainer that tails the firmware's UART output into the
-        // same shared buffer the wait_for_log helpers consult.
-        // SAFETY: master is an owned fd we keep alive on `self`.
-        let master_file = unsafe { std::fs::File::from_raw_fd(master.into_raw_fd()) };
+        // Renode needs a moment to create the symlink. Poll up to
+        // ~5 s; this is a small fraction of the full boot budget
+        // and the failure mode (missing symlink → fail open) is
+        // immediate and clear.
+        let symlink_deadline = Instant::now() + Duration::from_secs(5);
+        while !slave_path.exists() {
+            if Instant::now() >= symlink_deadline {
+                graceful_kill(&mut child, Duration::from_secs(2));
+                let snapshot = log.text.lock().unwrap().clone();
+                return Err(TestError::BootTimeout {
+                    timeout_secs: 5,
+                })
+                .inspect_err(|_| {
+                    eprintln!("Renode never created pty at {}; log:\n{snapshot}", slave_path.display());
+                });
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+
+        // Open Renode's pty master and tail it.
+        let master_file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&slave_path)?;
         let master_clone = master_file.try_clone()?;
         spawn_drainer(master_clone, Arc::clone(&log), "uart");
 
         let sitl = Self {
             child: Mutex::new(child),
             pty_master: Mutex::new(master_file),
+            pty_path: slave_path,
             log,
         };
 
-        sitl.wait_for_log("Startup script returned successfully", BOOT_TIMEOUT)
+        sitl.wait_for_log(BOOT_BANNER, BOOT_TIMEOUT)
             .map_err(|e| match e {
                 TestError::LogTimeout { .. } => TestError::BootTimeout {
                     timeout_secs: BOOT_TIMEOUT.as_secs(),
@@ -136,9 +170,9 @@ impl Px4RenodeSitl {
         Ok(sitl)
     }
 
-    /// Run a shell command in the firmware's pxh shell. Writes
-    /// `cmd\r\n` to the UART and reads back everything up to the
-    /// next `pxh>` prompt.
+    /// Run a shell command in the firmware's `nsh`/`pxh` shell.
+    /// Writes `cmd\r\n` to the UART and reads back everything up to
+    /// the next `nsh>` prompt.
     pub fn shell(&self, cmd: &str) -> Result<String> {
         let pre_len = self.log.text.lock().unwrap().len();
         {
@@ -148,7 +182,7 @@ impl Px4RenodeSitl {
             master.flush()?;
         }
         // Wait until the next prompt appears beyond `pre_len`.
-        self.wait_for_log_after(PXH_PROMPT, pre_len, Duration::from_secs(10))?;
+        self.wait_for_log_after(NSH_PROMPT, pre_len, Duration::from_secs(10))?;
         let text = self.log.text.lock().unwrap();
         let after = &text[pre_len..];
         Ok(after.to_string())
@@ -206,8 +240,13 @@ impl Px4RenodeSitl {
 
 impl Drop for Px4RenodeSitl {
     fn drop(&mut self) {
-        let mut child = self.child.lock().unwrap();
-        graceful_kill(&mut child, Duration::from_secs(3));
+        {
+            let mut child = self.child.lock().unwrap();
+            graceful_kill(&mut child, Duration::from_secs(3));
+        }
+        // Renode normally cleans the pty symlink on shutdown, but
+        // SIGKILL skips that path — sweep it ourselves.
+        let _ = std::fs::remove_file(&self.pty_path);
     }
 }
 
@@ -324,13 +363,6 @@ fn resc_path() -> PathBuf {
 fn repl_path() -> PathBuf {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     manifest.join("platforms").join("px4_renode_h743.repl")
-}
-
-/// Resolve the slave-side device path of a pty fd.
-fn pty_path(fd: std::os::fd::BorrowedFd<'_>) -> Result<PathBuf> {
-    use nix::unistd::ttyname;
-    let p = ttyname(fd).map_err(TestError::Nix)?;
-    Ok(p)
 }
 
 fn find_line(buf: &str, pat: &str) -> Option<String> {

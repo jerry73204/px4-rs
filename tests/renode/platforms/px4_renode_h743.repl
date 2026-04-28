@@ -2,14 +2,28 @@
 //
 // The CPU/NVIC/MPU/USARTs/RAM/flash all live in Renode's stock
 // `stm32h743.repl` already; we just `using` it. Per-test attachment
-// of USART2 to a host pty is done at run-time by the companion
-// `.resc` script — that's a connector binding, not a platform
-// description.
-//
-// This file is intentionally a thin extension point. Add overrides
-// only when a particular phase-13 test needs a peripheral the stock
-// platform doesn't model — for example, a fake sensor on SPI to
-// drive `gyro_watch`'s spike detection. Until then, the upstream
-// description is exactly what we want.
+// of the console UART to a host pty is done at run-time by the
+// companion `.resc` script.
 
 using "platforms/cpus/stm32h743.repl"
+
+// PWR (Power Control) mock at the H743's PWR base address.
+//
+// Renode's stock `stm32h743.repl` only `Tag`s this region — reads
+// silently return 0. NuttX's H7 startup polls `PWR_D3CR` and
+// `PWR_CSR1` for voltage-scaling-ready bits in tight while-loops
+// (see `stm32h7x3xx_rcc.c`); a zero return wedges the boot.
+//
+// Inline script returns 0xFFFFFFFF on every read, which sets the
+// VOSRDY (D3CR bit 13) and ACTVOSRDY (CSR1 bit 13) the polls wait
+// on. Writes are dropped — fine, NuttX's writes to this block are
+// scaling configuration we'd otherwise have to honour.
+//
+// Range covers the entire 1 KiB PWR window so any future register
+// in the same block stays modelled as "always-ready". Inline-script
+// form (rather than a `.py` file) avoids portability issues with
+// Renode's filename path resolution.
+pwr: Python.PythonPeripheral @ sysbus 0x58024800
+    size: 0x400
+    initable: false
+    script: "if request.IsRead: request.Value = 0xFFFFFFFF"
