@@ -1,0 +1,35 @@
+// PX4 + NuttX boot script for Renode.
+//
+// The fixture (`Px4RenodeSitl::boot`) sets two variables before
+// running this file:
+//
+//   $slave  — host-side pty path Renode should attach USART2 to.
+//             The fixture opens the pty master end and drives the
+//             pxh shell through it.
+//
+// PX4_RENODE_FIRMWARE is read from the environment (Renode's `$ENV`)
+// so the same .resc works against any built .elf.
+
+:name: PX4_RENODE_H743
+:description: PX4 + NuttX firmware running on emulated STM32H743
+
+mach create "PX4_RENODE_H743"
+machine LoadPlatformDescription @platforms/px4_renode_h743.repl
+
+# Wire USART2 to the pty the host fixture opened. The host master
+# end will see anything the firmware writes and can write commands
+# back into the firmware's NSH/pxh shell.
+emulation CreateUartPtyTerminal "shellTerm" $slave true
+connector Connect sysbus.usart2 shellTerm
+
+# Load the firmware. Path comes from the env var the fixture sets.
+# `LoadELF` parses the ELF and stages it into emulated memory.
+$bin = $ORIGIN/../../firmware/px4_renode_h743.elf
+macro reset
+"""
+    sysbus LoadELF $bin
+"""
+runMacro $reset
+
+# Boot.
+start

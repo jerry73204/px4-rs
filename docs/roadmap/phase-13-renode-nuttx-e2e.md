@@ -5,7 +5,7 @@ Cortex-M and runs the same `e2e_*` test bodies that
 `tests/sitl/` already runs against POSIX SITL. Closes the ARM-codegen
 + NuttX-scheduler + interrupt-timing gap that POSIX SITL leaves open.
 
-**Status**: Not Started
+**Status**: Infrastructure landed; firmware-build (13.1) deferred
 **Priority**: P1 (any phase that changes the runtime should run on
 a target-shaped substrate before merge)
 **Depends on**: Phase 11 (the SITL fixture shape we mirror), Phase 12
@@ -139,35 +139,45 @@ poll — can't happen here. Two sub-benefits:
       drivers stripped, NuttX defconfig adjusted with
       `CONFIG_STM32H7_PWR_IGNORE_ACTVOSRDY=y` + the BASEPRI WAR
       NuttX's Renode guide flags. `make px4_renode_h743_default`
-      produces a `.elf` Renode can load. **Biggest unknown — most
-      of the phase risk lives here.**
-- [ ] **13.2** — `tests/renode/` workspace skeleton: standalone
+      produces a `.elf` Renode can load.
+      **Deferred — biggest unknown.** Phase 13's other items can
+      land independently because they all skip-detect when the
+      firmware artifact is missing (via `ensure_renode!()`); 13.1
+      itself is genuine board-config + Kconfig surgery on the
+      order of a few days. Pick this up when there's bandwidth to
+      iterate against a local Renode install.
+- [x] **13.2** — `tests/renode/` workspace skeleton: standalone
       `Cargo.toml`, `rust-toolchain.toml`, `.config/nextest.toml`
-      with a `renode` test-group capped at 1 thread (Renode is
-      stateful per process, like SITL).
-- [ ] **13.3** — `platforms/px4_renode_h743.repl`. Either extends
-      Renode's stock `stm32h743.repl` or pulls it in via
-      `using sysbus`; adds whatever extra UART / GPIO our board
-      config wires up.
-- [ ] **13.4** — `Px4RenodeSitl` fixture with the four-method API
-      above. Renode subprocess management, pty tail, prompt
-      detection. RAII teardown — kill Renode + reap on `Drop`.
-- [ ] **13.5** — Reuse `tests/sitl/px4-externals/` either by
-      symlink or by copy; the modules don't change. Wire them into
-      the new board's `EXTERNAL_MODULES_LOCATION`.
-- [ ] **13.6** — Port the existing test bodies. Most should be
-      copy-paste; the timer-bound ones get a Renode-time-advance
-      helper (`sitl.advance(Duration::from_secs(2))`).
-- [ ] **13.7** — CI track. New `renode-e2e` job in
-      `.github/workflows/ci.yml`, using the
-      `antmicro/renode-test-action` Docker image directly so we
-      don't pay Renode's install on every run. Decide pre-merge vs
-      nightly based on the warm runtime — target ≤ 3 minutes.
-- [ ] **13.8** — Documentation. New section in
-      `docs/linking-into-px4.md` pointing at `tests/renode/` as
-      the second e2e tier; brief Renode setup recipe for local
-      dev (`apt install renode` or the Docker image); update the
-      roadmap index.
+      with a `renode` test-group capped at 1 thread.
+- [x] **13.3** — `platforms/px4_renode_h743.repl` extends Renode's
+      stock `stm32h743.repl` (vendored fragment with the upstream
+      MIT header preserved). Companion `px4_renode_h743.resc`
+      wires USART2 to a host-side pty and loads the firmware ELF.
+- [x] **13.4** — `Px4RenodeSitl` fixture lands at
+      `tests/renode/src/fixtures/px4_renode.rs` with the
+      `boot / shell / wait_for_log / wait_for_exit` API exactly
+      mirroring `Px4Sitl`. Renode subprocess management, pty
+      master tail thread, RAII teardown via SIGTERM-then-SIGKILL.
+      Compiles clean; tests skip-pass without `RENODE` /
+      `PX4_RENODE_FIRMWARE`.
+- [ ] **13.5** — Reuse `tests/sitl/px4-externals/`. Plumbed once
+      13.1 lands; trivial once the firmware build is in place.
+- [ ] **13.6** — Port the existing test bodies. Two are stubbed in
+      `tests/renode/tests/smoke.rs` already (boot probe + uorb
+      status), with `ensure_renode!()` skip detection. The rest
+      port wholesale once the firmware actually boots on Renode.
+      Timer-bound ones may want a Renode-time-advance helper.
+- [x] **13.7** — CI track. `renode-e2e` job in
+      `.github/workflows/ci.yml` always runs and verifies the
+      fixture compiles + the smoke tests pass on the skip path.
+      The follow-up step that pulls Antmicro's Renode Docker image
+      and runs the actual emulation lands once 13.1 produces a
+      firmware artifact.
+- [x] **13.8** — Documentation. `tests/renode/README.md` covers
+      local setup; `docs/linking-into-px4.md` gains a section
+      pointing at the second e2e tier; the roadmap index lists
+      phase 13. `docs/research/renode-vs-qemu.md` records the
+      substrate decision.
 
 ## Acceptance criteria
 

@@ -141,3 +141,37 @@ jobs:
             echo "commit the regenerated crates/px4-sys/bindings/bindings.rs."
             exit 1
           fi
+
+  # Phase-13 Renode + NuttX e2e suite. The Rust fixture compiles
+  # always; the actual test bodies skip-return via `ensure_renode!()`
+  # unless both `RENODE` and `PX4_RENODE_FIRMWARE` are set. This job
+  # confirms the fixture builds clean on every push and that the
+  # smoke tests pass in their skip path. Once work item 13.1 lands
+  # (the px4_renode_h743 PX4 board config), this job grows a step
+  # that runs the Antmicro Renode Docker action against a built
+  # firmware artifact.
+  renode-e2e:
+    name: tests/renode (skip-path)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install rustup toolchain
+        run: rustup show
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            tests/renode/target
+          key: cargo-renode-${{ runner.os }}-${{ hashFiles('tests/renode/Cargo.lock', 'rust-toolchain.toml') }}
+
+      - name: Build the renode fixture crate
+        run: cd tests/renode && cargo build
+
+      - name: Run the renode test suite (skip path)
+        # Without RENODE / PX4_RENODE_FIRMWARE, every test is
+        # expected to print [SKIPPED] and exit zero.
+        run: cd tests/renode && cargo test

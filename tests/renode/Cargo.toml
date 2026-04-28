@@ -1,0 +1,21 @@
+[package]
+name        = "px4-renode-tests"
+version     = "0.1.0"
+edition     = "2024"
+publish     = false
+description = "End-to-end tests that boot PX4 + NuttX on Renode and drive it via UART pty."
+
+[lib]
+doctest = false
+
+[dependencies]
+# Stable error type for the Px4RenodeSitl fixture.
+thiserror = "2.0"
+# Substring matching for log waits.
+regex     = "1.10"
+
+[target.'cfg(unix)'.dependencies]
+# pty(7) + SIGTERM/SIGKILL for graceful shutdown of the Renode subprocess.
+libc = "0.2"
+# Higher-level pty + signal helpers.
+nix   = { version = "0.29", default-features = false, features = ["fs", "process", "signal", "term"] }

@@ -1,0 +1,21 @@
+# Nextest config for the Renode-driven e2e suite.
+#
+# Each test boots its own Renode subprocess. Renode binds a Monitor
+# TCP port and a UART pty; two instances can't share those, so tests
+# must run serially under a `renode` test-group capped at one thread.
+
+[[profile.default.overrides]]
+filter      = "package(px4-renode-tests)"
+test-group  = "renode"
+
+[test-groups]
+renode = { max-threads = 1 }
+
+# Renode boot is slower than POSIX SITL: PX4 + NuttX coming up on
+# emulated H7 takes 10–30 seconds of virtual time. Allow generous
+# slack for cold boots; tests after the first share the cached
+# firmware build.
+[profile.default]
+slow-timeout       = { period = "60s", terminate-after = 4 }
+status-level       = "pass"
+final-status-level = "slow"

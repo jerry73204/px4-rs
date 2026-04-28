@@ -222,6 +222,29 @@ the cached PX4 build and finish in under 30 seconds. Without
 so the suite is safe to invoke from CI runners that don't have a
 PX4 checkout.
 
+### Renode + NuttX tier (phase 13)
+
+A second e2e suite under [`tests/renode/`](../tests/renode/) runs
+the same kind of test bodies against PX4 + NuttX firmware booting
+on emulated STM32H743 inside Renode. Where SITL exercises the
+runtime against PX4's POSIX build on x86_64 Linux pthreads, the
+Renode tier executes actual ARM Cortex-M code under the real NuttX
+scheduler — closing the ARM-codegen + scheduler + interrupt-timing
+gap SITL leaves open.
+
+```sh
+RENODE=$(which renode) \
+PX4_RENODE_FIRMWARE=$HOME/.../px4_renode_h743.elf \
+just test-renode
+```
+
+Without those env vars, every test reports `[SKIPPED]` — same
+shape as `ensure_px4!()`. See
+[`tests/renode/README.md`](../tests/renode/README.md) for the
+firmware-build prerequisites and
+[`docs/research/renode-vs-qemu.md`](research/renode-vs-qemu.md)
+for why Renode rather than QEMU.
+
 ## Manual smoke test
 
 Before a real PX4 build, verify the staticlib compiles on the host:

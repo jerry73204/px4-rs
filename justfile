@@ -89,6 +89,13 @@ test:
 test-sitl:
     cd tests/sitl && cargo nextest run
 
+# Phase-13 e2e: drives PX4+NuttX firmware on emulated STM32H7 via
+# Renode. Tests skip cleanly if RENODE / PX4_RENODE_FIRMWARE are
+# unset — see tests/renode/README.md for the full setup. Runs
+# serially via nextest's `renode` test-group.
+test-renode:
+    cd tests/renode && cargo nextest run
+
 # ---------------------------------------------------------------------------
 # Docs
 # ---------------------------------------------------------------------------

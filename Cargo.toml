@@ -29,6 +29,7 @@ exclude = [
     "examples/gyro_watch",
     "examples/multi_task",
     "tests/sitl",
+    "tests/renode",
 ]
 
 [workspace.package]
