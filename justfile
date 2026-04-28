@@ -15,7 +15,7 @@ export PX4_AUTOPILOT_DIR := env_var_or_default("PX4_AUTOPILOT_DIR", justfile_dir
 # schema is stable across patches but occasionally reworks across
 # minor versions, so we pin a known-good release rather than tracking
 # `latest`. Bump deliberately and rerun `just test-renode` after.
-RENODE_VERSION := env_var_or_default("RENODE_VERSION", "1.15.3")
+RENODE_VERSION := env_var_or_default("RENODE_VERSION", "1.16.1")
 
 default:
     @just --list
