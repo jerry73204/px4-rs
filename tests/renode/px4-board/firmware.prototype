@@ -1,0 +1,13 @@
+{
+    "board_id": 99,
+    "magic": "PX4FWv1",
+    "description": "Phase-13 PX4-on-NuttX firmware for Renode-emulated STM32H743",
+    "image": "",
+    "build_time": 0,
+    "summary": "PX4Renode-H743",
+    "version": "0.1",
+    "image_size": 0,
+    "image_maxsize": 1966080,
+    "git_identity": "",
+    "board_revision": 0
+}

@@ -145,20 +145,45 @@ poll — can't happen here. Two sub-benefits:
       The `tests/renode/tests/smoke.rs::fixture_boots_to_nuttx_banner`
       test gates the boot path — passes live in CI when
       `PX4_RENODE_FIRMWARE` is set to the NuttX ELF.
-- [ ] **13.1** — Full PX4-on-NuttX board config (`px4_renode_h743`):
-      a custom PX4 board branched from `boards/px4/fmu-v6x/`,
-      sensor + actuator drivers stripped, NuttX defconfig from the
-      working 13.1-lite baseline. Once it produces a firmware,
-      `tests/renode/tests/pxh.rs` gates flip to live — the gating
-      env var is `PX4_RENODE_HAS_PX4=1` (uorb / shell tests).
+- [/] **13.1** — Full PX4-on-NuttX board config (`px4_renode-h743`).
+      Scaffolding + injection plumbing landed, build progresses
+      most of the way through, blocks on a config gap. Concrete
+      state:
+      * `tests/renode/px4-board/` template branched from fmu-v6c
+        (smallest H7 PX4 board — 268-line defconfig, 4 src files)
+        with drivers + flight stack stripped down to a small
+        systemcmd allow-list (`uorb`, `ver`, `listener`,
+        `work_queue`, `perf`, `top`, `dmesg`, `param`, `reboot`)
+        plus the logger module.
+      * `scripts/setup-board.sh` copies the template into
+        `$PX4_AUTOPILOT_DIR/boards/px4/renode-h743/` (PX4's
+        Makefile uses `find` without `-L`, so a symlink wouldn't
+        be discovered). `scripts/teardown-board.sh` is the inverse
+        with a sentinel guard so we never clobber a user-authored
+        board with the same name.
+      * `make list_config_targets` recognises the board as
+        `px4_renode-h743[_default]`.
+      * `make px4_renode-h743_default` compiles past CMake config
+        and well into the source tree before stalling on
+        `platforms/nuttx/src/px4/common/gpio.c` declaring
+        `stm32_configgpio` implicitly. Baseline `make
+        px4_fmu-v6c_default` builds clean from the same toolchain,
+        so the gap is in our stripped px4board manifest — likely a
+        SYSTEMCMDS or DRIVERS_GPIO Kconfig fmu-v6c enables that
+        we're missing. Next step: bisect the px4board diff against
+        fmu-v6c's manifest, re-enable just enough to satisfy the
+        gpio.c symbol resolution.
+      Once the firmware lands, `tests/renode/tests/pxh.rs` gates
+      flip to live — `PX4_RENODE_HAS_PX4=1`.
       **Open issue blocking shell-driven tests on bare NuttX**:
       stock `nucleo-h743zi:nsh` panics shortly after the prompt
       via `irq_unexpected_isr → PANIC()` on IRQ 120 (MDIOS) — an
       interrupt Renode's STM32H7 model fires from reset-default
       state that NuttX hasn't registered a handler for. PX4 board
-      configs can disable MDIOS at the Kconfig level, dodging the
-      issue. Tracked here rather than as a blocker for
-      infrastructure validation.
+      configs can disable MDIOS at the Kconfig level (or simply
+      not enable `CONFIG_STM32H7_MDIOS=y` — fmu-v6c doesn't), so
+      this is expected to dodge itself once the build of 13.1
+      succeeds.
 - [x] **13.2** — `tests/renode/` workspace skeleton: standalone
       `Cargo.toml`, `rust-toolchain.toml`, `.config/nextest.toml`
       with a `renode` test-group capped at 1 thread.
