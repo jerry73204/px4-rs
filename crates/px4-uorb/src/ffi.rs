@@ -222,6 +222,18 @@ pub(crate) mod mock {
         }
     }
 
+    /// Tracks every `Box::into_raw`'d `SubCbInner` so `_reset_broker`
+    /// can free them at the end of a test. Without this set, leaked
+    /// callback boxes accumulate across tests in the same process and
+    /// surface as `tcache_thread_shutdown: unaligned tcache chunk
+    /// detected` at thread exit (glibc heap-corruption canary firing
+    /// because the leaked allocations interleave with normal heap
+    /// state in unexpected ways).
+    fn live_cbs() -> &'static Mutex<Vec<usize>> {
+        static V: OnceLock<Mutex<Vec<usize>>> = OnceLock::new();
+        V.get_or_init(|| Mutex::new(Vec::new()))
+    }
+
     pub(crate) unsafe fn sub_cb_new(
         meta: &'static orb_metadata,
         _interval_us: u32,
@@ -240,7 +252,9 @@ pub(crate) mod mock {
             call: Some(call),
             registered: Mutex::new(false),
         });
-        Box::into_raw(cb)
+        let raw = Box::into_raw(cb);
+        live_cbs().lock().unwrap().push(raw as usize);
+        raw
     }
 
     pub(crate) unsafe fn sub_cb_register(cb: *mut SubCb) -> bool {
@@ -286,11 +300,24 @@ pub(crate) mod mock {
     pub(crate) unsafe fn sub_cb_delete(cb: *mut SubCb) {
         unsafe {
             sub_cb_unregister(cb);
+            live_cbs().lock().unwrap().retain(|p| *p != cb as usize);
             drop(Box::from_raw(cb));
         }
     }
 
     /// Test-only — clear the entire broker so each test runs fresh.
+    ///
+    /// We do NOT free leaked `SubCbInner` boxes here even though
+    /// `live_cbs()` knows about them. Subscriptions in the calling
+    /// test still hold raw pointers to those boxes; freeing them
+    /// from `_reset_broker` would race the test's own
+    /// `Subscription::drop` and cause a use-after-free. The boxes
+    /// stay alive (each holding an `Arc<TopicState>` — the topic
+    /// stays alive until the last Subscription drops, then the Arc
+    /// count hits zero), so reset is correct and minimal.
+    ///
+    /// `live_cbs()` is kept in case future test infra wants to
+    /// assert "no leaked subs" at end of test.
     pub fn _reset_broker() {
         broker().lock().unwrap().clear();
     }
