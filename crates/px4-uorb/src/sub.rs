@@ -113,6 +113,19 @@ impl<T: UorbTopic> Subscription<T> {
     pub fn recv(&self) -> Recv<'_, T> {
         Recv { sub: self }
     }
+
+    /// Register a waker on this subscription's single-slot
+    /// `AtomicWaker`. Forces the underlying `SubscriptionCallback` to
+    /// be wired (lazy-init via `ensure_registered`) so the waker fires
+    /// the next time PX4 publishes on this topic.
+    ///
+    /// Idempotent. Replaces any previously registered waker. Use this
+    /// when a higher-level executor wants to park on multiple
+    /// subscriptions without consuming any of them.
+    pub fn register_waker(&self, w: &core::task::Waker) {
+        self.ensure_registered();
+        self.waker.register(w);
+    }
 }
 
 impl<T: UorbTopic> Default for Subscription<T> {
