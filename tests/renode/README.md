@@ -25,9 +25,19 @@ it, every test in this crate skip-returns via `ensure_renode!()`.
 
 Two prerequisites:
 
-1. **Renode**. Either install the binary
-   (`apt install renode` on Debian/Ubuntu, or download from
-   <https://renode.io/#downloads>), or use the official Docker image.
+1. **Renode** at the pinned version. On Debian/Ubuntu:
+   ```sh
+   just setup-renode
+   ```
+   The recipe downloads the pinned `.deb` from Antmicro's GitHub
+   releases and `sudo apt install`s it. The version is set in the
+   top-level `justfile` (`RENODE_VERSION`); override on the command
+   line for one-off bumps:
+   ```sh
+   RENODE_VERSION=1.16.0 just setup-renode
+   ```
+   On macOS: `brew install --cask renode`. On Windows: the `.msi`
+   from <https://renode.io/#downloads>.
 2. **A built `px4_renode_h743.elf`** firmware binary — the output of
    `make px4_renode_h743_default` once the PX4 board config lands.
 

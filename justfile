@@ -11,6 +11,12 @@ set dotenv-load := true
 # Override via env or .env file.
 export PX4_AUTOPILOT_DIR := env_var_or_default("PX4_AUTOPILOT_DIR", justfile_directory() + "/../PX4-Autopilot")
 
+# Pinned Renode release for the phase-13 e2e suite. Renode's `.repl`
+# schema is stable across patches but occasionally reworks across
+# minor versions, so we pin a known-good release rather than tracking
+# `latest`. Bump deliberately and rerun `just test-renode` after.
+RENODE_VERSION := env_var_or_default("RENODE_VERSION", "1.15.3")
+
 default:
     @just --list
 
@@ -18,13 +24,45 @@ default:
 # Setup / diagnostics
 # ---------------------------------------------------------------------------
 
-# Install rustup toolchain components listed in rust-toolchain.toml.
-setup:
+# Install rustup toolchain components listed in rust-toolchain.toml,
+# then make sure the phase-13 Renode binary is present at the pinned
+# version.
+setup: setup-renode
     rustup show active-toolchain
     rustup component add rustfmt clippy rust-src
     @echo "PX4_AUTOPILOT_DIR = $PX4_AUTOPILOT_DIR"
     @test -d "$PX4_AUTOPILOT_DIR" \
         || echo "WARNING: PX4_AUTOPILOT_DIR does not exist — codegen recipes will fail"
+
+# Install the pinned Renode .deb from Antmicro's GitHub releases.
+# Idempotent: skips if `renode --version` already reports a match.
+# Linux-only — apt-based; macOS / Windows users run the platform
+# installer manually (see tests/renode/README.md).
+setup-renode:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if ! command -v apt >/dev/null 2>&1; then
+        echo "setup-renode: not on a Debian/Ubuntu system — skipping."
+        echo "  See tests/renode/README.md for the macOS / Windows recipe."
+        exit 0
+    fi
+    if command -v renode >/dev/null 2>&1; then
+        installed="$(renode --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)"
+        if [ "$installed" = "{{RENODE_VERSION}}" ]; then
+            echo "renode {{RENODE_VERSION}} already installed — skipping."
+            exit 0
+        fi
+        echo "renode $installed installed; replacing with pinned {{RENODE_VERSION}}."
+    fi
+    deb="/tmp/renode_{{RENODE_VERSION}}_amd64.deb"
+    url="https://github.com/renode/renode/releases/download/v{{RENODE_VERSION}}/renode_{{RENODE_VERSION}}_amd64.deb"
+    if [ ! -f "$deb" ]; then
+        echo "Downloading $url"
+        curl --fail --location --silent --show-error -o "$deb" "$url"
+    fi
+    echo "Installing $deb (sudo apt install)"
+    sudo apt install --yes "$deb"
+    renode --version | head -1
 
 # Read-only check of the dev environment.
 doctor:
@@ -37,6 +75,11 @@ doctor:
     @command -v bindgen >/dev/null \
         && echo "bindgen-cli installed" \
         || echo "bindgen-cli NOT installed (optional, build.rs uses library API)"
+    @if command -v renode >/dev/null; then \
+        echo "renode $(renode --version 2>/dev/null | head -1) (pinned: {{RENODE_VERSION}})"; \
+    else \
+        echo "renode NOT installed (run \`just setup-renode\` for phase-13 e2e)"; \
+    fi
 
 # ---------------------------------------------------------------------------
 # Quality
