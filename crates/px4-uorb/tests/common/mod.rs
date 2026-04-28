@@ -4,10 +4,6 @@
 
 #![allow(dead_code)]
 
-use core::future::Future;
-use core::pin::Pin;
-use core::task::{Context, Poll};
-
 use px4_msg_macros::px4_message;
 
 #[px4_message("tests/fixtures/SensorGyro.msg")]
@@ -29,18 +25,6 @@ pub fn sample(stamp: u32) -> SensorGyro {
     }
 }
 
-pub struct YieldOnce(bool);
-impl Future for YieldOnce {
-    type Output = ();
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
-        if self.0 {
-            return Poll::Ready(());
-        }
-        self.0 = true;
-        cx.waker().wake_by_ref();
-        Poll::Pending
-    }
-}
-pub fn yield_now() -> YieldOnce {
-    YieldOnce(false)
-}
+// `yield_now` lives in `px4_workqueue` now. Re-export so the
+// extension test files keep working without each importing it.
+pub use px4_workqueue::yield_now;

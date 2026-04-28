@@ -72,18 +72,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "e2e_smoke"
-version = "0.1.0"
-dependencies = [
- "px4-log",
- "px4-msg-macros",
- "px4-sys",
- "px4-uorb",
- "px4-workqueue",
- "px4-workqueue-macros",
-]
-
-[[package]]
 name = "either"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -189,10 +177,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "px4"
+version = "0.1.0"
+dependencies = [
+ "px4-log",
+ "px4-macros",
+ "px4-msg-macros",
+ "px4-sys",
+ "px4-uorb",
+ "px4-workqueue",
+ "px4-workqueue-macros",
+]
+
+[[package]]
 name = "px4-log"
 version = "0.1.0"
 dependencies = [
  "px4-sys",
+]
+
+[[package]]
+name = "px4-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -247,6 +257,13 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "px4_rust_template"
+version = "0.1.0"
+dependencies = [
+ "px4",
 ]
 
 [[package]]

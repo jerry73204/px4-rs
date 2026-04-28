@@ -74,7 +74,7 @@ pub use px4_log::{Level, debug, err, info, module, panic_handler, warn};
 // ---------------------------------------------------------------- runtime
 pub use px4_workqueue::{
     AtomicWaker, Channel, Notify, Sleep, SpawnError, SpawnToken, WorkItemCell, WqConfig, sleep,
-    wq_configurations,
+    wq_configurations, yield_now,
 };
 pub use px4_workqueue_macros::task;
 

@@ -34,6 +34,7 @@ mod notify;
 mod timer;
 mod waker;
 mod wq;
+mod yield_;
 
 pub use atomic_waker::AtomicWaker;
 pub use cell::{SpawnError, SpawnToken, WorkItemCell};
@@ -41,6 +42,7 @@ pub use channel::{Channel, Recv, Send};
 pub use notify::{Notified, Notify};
 pub use timer::{Sleep, sleep};
 pub use wq::{WqConfig, wq_configurations};
+pub use yield_::{YieldNow, yield_now};
 
 pub use px4_workqueue_macros::task;
 

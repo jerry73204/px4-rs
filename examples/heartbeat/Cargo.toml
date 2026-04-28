@@ -10,15 +10,10 @@ crate-type = ["staticlib"]
 doctest    = false
 
 [dependencies]
-# Relative paths from this Cargo.toml. When copied out of the px4-rs
-# tree into your EXTERNAL_MODULES_LOCATION, rewrite these to point at
+# Relative path from this Cargo.toml. When copied out of the px4-rs
+# tree into your EXTERNAL_MODULES_LOCATION, rewrite this to point at
 # wherever your px4-rs checkout lives (absolute or relative).
-px4-log              = { path = "../../crates/px4-log" }
-px4-sys              = { path = "../../crates/px4-sys" }
-px4-uorb             = { path = "../../crates/px4-uorb" }
-px4-workqueue        = { path = "../../crates/px4-workqueue" }
-px4-workqueue-macros = { path = "../../crates/px4-workqueue-macros" }
-px4-msg-macros       = { path = "../../crates/px4-msg-macros" }
+px4 = { path = "../../crates/px4" }
 
 # A staticlib #![no_std] crate that will be linked into a PX4 binary
 # needs panic = "abort" so rustc doesn't require an eh_personality

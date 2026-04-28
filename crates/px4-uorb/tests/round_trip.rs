@@ -7,33 +7,11 @@
 #![cfg(feature = "std")]
 #![feature(type_alias_impl_trait)]
 
-use core::future::Future;
-use core::pin::Pin;
-use core::task::{Context, Poll};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use px4_msg_macros::px4_message;
 use px4_uorb::{Publication, Subscription};
-use px4_workqueue::{drain_until_idle, task};
-
-/// Yields control once: registers the calling task's waker and
-/// returns Pending, then Ready on the next poll. Lets a sibling task
-/// run between iterations of a tight loop.
-struct YieldOnce(bool);
-impl Future for YieldOnce {
-    type Output = ();
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
-        if self.0 {
-            return Poll::Ready(());
-        }
-        self.0 = true;
-        cx.waker().wake_by_ref();
-        Poll::Pending
-    }
-}
-fn yield_now() -> YieldOnce {
-    YieldOnce(false)
-}
+use px4_workqueue::{drain_until_idle, task, yield_now};
 
 #[px4_message("tests/fixtures/SensorGyro.msg")]
 pub struct SensorGyro;

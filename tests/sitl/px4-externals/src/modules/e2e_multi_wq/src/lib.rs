@@ -9,12 +9,9 @@
 #![feature(type_alias_impl_trait)]
 
 use core::ffi::{c_char, c_int};
-use core::future::Future;
-use core::pin::Pin;
-use core::task::{Context, Poll};
 
 use px4_log::{info, module, panic_handler};
-use px4_workqueue::task;
+use px4_workqueue::{task, yield_now};
 
 module!("e2e_multi_wq");
 panic_handler!();
@@ -28,7 +25,7 @@ async fn lp_tick() {
         if n.is_multiple_of(50_000) {
             info!("lp_default tick n={n}");
         }
-        YieldOnce::new().await;
+        yield_now().await;
     }
 }
 
@@ -41,7 +38,7 @@ async fn hp_tick() {
         if n.is_multiple_of(50_000) {
             info!("hp_default tick n={n}");
         }
-        YieldOnce::new().await;
+        yield_now().await;
     }
 }
 
@@ -103,20 +100,3 @@ fn parse_first_arg<'a>(argc: c_int, argv: *mut *mut c_char) -> Option<&'a [u8]> 
     }
 }
 
-struct YieldOnce(bool);
-impl YieldOnce {
-    fn new() -> Self {
-        Self(false)
-    }
-}
-impl Future for YieldOnce {
-    type Output = ();
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
-        if self.0 {
-            return Poll::Ready(());
-        }
-        self.0 = true;
-        cx.waker().wake_by_ref();
-        Poll::Pending
-    }
-}
