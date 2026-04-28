@@ -23,10 +23,10 @@ use std::path::PathBuf;
 
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
-use proc_macro_crate::{FoundCrate, crate_name};
+use proc_macro_crate::{crate_name, FoundCrate};
 use px4_msg_codegen::EmitPaths;
 use quote::quote;
-use syn::{Ident, LitStr, parse_macro_input};
+use syn::{parse_macro_input, Ident, LitStr};
 
 #[proc_macro_attribute]
 pub fn px4_message(attr: TokenStream, item: TokenStream) -> TokenStream {

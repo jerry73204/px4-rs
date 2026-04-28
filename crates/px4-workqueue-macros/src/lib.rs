@@ -36,11 +36,11 @@
 
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
-use proc_macro_crate::{FoundCrate, crate_name};
+use proc_macro_crate::{crate_name, FoundCrate};
 use quote::quote;
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
-use syn::{Ident, ItemFn, LitStr, ReturnType, Token, parse_macro_input};
+use syn::{parse_macro_input, Ident, ItemFn, LitStr, ReturnType, Token};
 
 /// Resolve the path the user's crate uses to reach `px4-workqueue` —
 /// either directly (`#wq`) or through the `px4`

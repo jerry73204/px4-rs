@@ -41,7 +41,7 @@ use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{format_ident, quote};
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
-use syn::{FnArg, Ident, ItemFn, LitStr, ReturnType, Token, parse_macro_input};
+use syn::{parse_macro_input, FnArg, Ident, ItemFn, LitStr, ReturnType, Token};
 
 #[proc_macro_attribute]
 pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -109,7 +109,12 @@ fn expand(args: Args, input: ItemFn) -> syn::Result<TokenStream2> {
             "#[px4::main] fn takes at most one argument (an `Args`)",
         ));
     }
-    if let Some(arg) = input.sig.inputs.iter().find(|a| matches!(a, FnArg::Receiver(_))) {
+    if let Some(arg) = input
+        .sig
+        .inputs
+        .iter()
+        .find(|a| matches!(a, FnArg::Receiver(_)))
+    {
         return Err(syn::Error::new_spanned(
             arg,
             "#[px4::main] fn cannot take `self`",

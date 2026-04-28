@@ -26,7 +26,7 @@
 
 use core::ffi::{CStr, c_int};
 
-use crate::{Level, __log_impl};
+use crate::{__log_impl, Level};
 
 /// Convert a PX4 module entry point's return value into the C `int`
 /// PX4 expects.
