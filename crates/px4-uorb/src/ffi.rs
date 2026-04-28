@@ -109,17 +109,19 @@ pub(crate) mod mock {
     }
 
     /// Shared state for one topic.
+    ///
+    /// `callbacks` holds owning `Arc` clones of every registered
+    /// `SubCbInner`. Snapshotting in `notify()` clones the Vec, so
+    /// each in-flight dispatch holds its own refcount on every
+    /// callback — a concurrent `Subscription::drop` (which decrements
+    /// the original Arc via `sub_cb_delete`) cannot race-free the
+    /// inner while the snapshot iteration is touching it.
     struct TopicState {
         size: usize,
         seq: Mutex<u64>,
         data: Mutex<Vec<u8>>,
-        callbacks: Mutex<Vec<*const SubCbInner>>,
+        callbacks: Mutex<Vec<Arc<SubCbInner>>>,
     }
-
-    // SAFETY: callback pointers refer to leaked SubCbInner allocations
-    // whose lifetime is global. The mutexes guard concurrent access.
-    unsafe impl Send for TopicState {}
-    unsafe impl Sync for TopicState {}
 
     fn broker() -> &'static Mutex<HashMap<String, Arc<TopicState>>> {
         static B: OnceLock<Mutex<HashMap<String, Arc<TopicState>>>> = OnceLock::new();
@@ -212,23 +214,48 @@ pub(crate) mod mock {
     }
 
     fn notify(topic: &Arc<TopicState>) {
-        let cbs = topic.callbacks.lock().unwrap().clone();
-        for cb in cbs {
-            // SAFETY: SubCbInner is leaked on creation; valid until sub_cb_delete.
-            let cb_ref: &SubCbInner = unsafe { &*cb };
-            if let Some(call) = cb_ref.call {
-                unsafe { call(cb_ref.ctx as *mut c_void) };
+        // Hold the callback list lock across dispatch.
+        //
+        // Two reasons we cannot snapshot-and-release:
+        //
+        // 1. `SubCbInner` lifetime — fixed by `Vec<Arc<SubCbInner>>`,
+        //    each clone keeps the inner alive across iteration.
+        // 2. **`ctx` lifetime** — the callback dereferences
+        //    `cb.ctx`, which points into the awaiting `Subscription`
+        //    (a `*const AtomicWaker`). If `Subscription::drop` runs
+        //    between snapshot and dispatch, `sub_cb_delete` removes
+        //    the entry from the list but the `ctx` pointer in our
+        //    snapshot still aims at freed `Subscription` storage.
+        //    The `Arc<SubCbInner>` clone protects the *inner* but
+        //    not the *external* waker.
+        //
+        // Holding the lock across dispatch makes
+        // `sub_cb_unregister` (called from `sub_cb_delete`) block
+        // until the dispatch finishes, so the `Subscription` storage
+        // stays alive for the duration of the call.
+        //
+        // The wake callbacks are short and side-effect-only
+        // (`AtomicWaker::wake` → `Waker::wake_by_ref`). Holding the
+        // lock for that long is fine. Pathological wake handlers
+        // that re-enter the broker (e.g. publish-on-wake) would
+        // deadlock — document that as unsupported.
+        let cbs = topic.callbacks.lock().unwrap();
+        for cb in cbs.iter() {
+            if let Some(call) = cb.call {
+                // SAFETY: `cb.ctx` was set by the awaiting
+                // Subscription via `sub_cb_new`. The Subscription
+                // cannot have run `Drop` while we hold this lock —
+                // any concurrent `sub_cb_delete` blocks on the
+                // `sub_cb_unregister` call inside it, which needs
+                // the same lock.
+                unsafe { call(cb.ctx as *mut c_void) };
             }
         }
     }
 
-    /// Tracks every `Box::into_raw`'d `SubCbInner` so `_reset_broker`
-    /// can free them at the end of a test. Without this set, leaked
-    /// callback boxes accumulate across tests in the same process and
-    /// surface as `tcache_thread_shutdown: unaligned tcache chunk
-    /// detected` at thread exit (glibc heap-corruption canary firing
-    /// because the leaked allocations interleave with normal heap
-    /// state in unexpected ways).
+    /// Tracks every live `SubCbInner` (by inner-data address) for
+    /// leak-debugging. Each address is the `Arc::into_raw` result
+    /// returned to the FFI caller as a `*mut SubCb` handle.
     fn live_cbs() -> &'static Mutex<Vec<usize>> {
         static V: OnceLock<Mutex<Vec<usize>>> = OnceLock::new();
         V.get_or_init(|| Mutex::new(Vec::new()))
@@ -242,7 +269,7 @@ pub(crate) mod mock {
         call: unsafe extern "C" fn(*mut c_void),
     ) -> *mut SubCb {
         let topic = topic_for(meta);
-        let cb = Box::new(SubCbInner {
+        let cb = Arc::new(SubCbInner {
             size: topic.size,
             topic,
             // Initial last_seen = 0; if a publish has already happened
@@ -252,29 +279,55 @@ pub(crate) mod mock {
             call: Some(call),
             registered: Mutex::new(false),
         });
-        let raw = Box::into_raw(cb);
+        let raw = Arc::into_raw(cb) as *mut SubCb;
         live_cbs().lock().unwrap().push(raw as usize);
         raw
     }
 
+    /// Borrow the SubCbInner pointed to by an FFI handle without
+    /// taking ownership. The handle was returned by
+    /// `Arc::into_raw(...)` and is reclaimed only by `sub_cb_delete`.
+    ///
+    /// SAFETY: caller must guarantee `cb` is a valid handle — it
+    /// came from `sub_cb_new` and `sub_cb_delete` has not been
+    /// called.
+    unsafe fn cb_ref<'a>(cb: *mut SubCb) -> &'a SubCbInner {
+        unsafe { &*(cb as *const SubCbInner) }
+    }
+
     pub(crate) unsafe fn sub_cb_register(cb: *mut SubCb) -> bool {
-        let cb_ref: &SubCbInner = unsafe { &*cb };
-        let mut reg = cb_ref.registered.lock().unwrap();
+        let inner = unsafe { cb_ref(cb) };
+        let mut reg = inner.registered.lock().unwrap();
         if !*reg {
-            cb_ref.topic.callbacks.lock().unwrap().push(cb as *const _);
+            // Push an extra Arc clone into the topic's callback
+            // list. The clone keeps the inner alive across `notify`
+            // dispatch even if the original Arc is dropped via
+            // `sub_cb_delete` while a callback is in flight.
+            // SAFETY: the original Arc lives at `cb` until
+            // sub_cb_delete consumes it; we increment its refcount
+            // by reconstructing-and-clone-and-leaking.
+            let original = unsafe { Arc::from_raw(cb as *const SubCbInner) };
+            inner
+                .topic
+                .callbacks
+                .lock()
+                .unwrap()
+                .push(Arc::clone(&original));
+            // Re-leak the original so the FFI handle stays valid.
+            let _leak = Arc::into_raw(original);
             *reg = true;
         }
         true
     }
 
     pub(crate) unsafe fn sub_cb_update(cb: *mut SubCb, dst: *mut c_void) -> bool {
-        let cb_ref: &SubCbInner = unsafe { &*cb };
-        let cur = *cb_ref.topic.seq.lock().unwrap();
-        let mut last = cb_ref.last_seen.lock().unwrap();
+        let inner = unsafe { cb_ref(cb) };
+        let cur = *inner.topic.seq.lock().unwrap();
+        let mut last = inner.last_seen.lock().unwrap();
         if cur > *last {
-            let data = cb_ref.topic.data.lock().unwrap();
+            let data = inner.topic.data.lock().unwrap();
             unsafe {
-                std::ptr::copy_nonoverlapping(data.as_ptr(), dst as *mut u8, cb_ref.size);
+                std::ptr::copy_nonoverlapping(data.as_ptr(), dst as *mut u8, inner.size);
             }
             *last = cur;
             true
@@ -284,15 +337,19 @@ pub(crate) mod mock {
     }
 
     pub(crate) unsafe fn sub_cb_unregister(cb: *mut SubCb) {
-        let cb_ref: &SubCbInner = unsafe { &*cb };
-        let mut reg = cb_ref.registered.lock().unwrap();
+        let inner = unsafe { cb_ref(cb) };
+        let mut reg = inner.registered.lock().unwrap();
         if *reg {
-            cb_ref
+            // Remove the matching Arc clone from the callback list
+            // by inner-data pointer identity. `Arc::as_ptr` returns
+            // the same address that `Arc::into_raw` did.
+            let cb_ptr = cb as *const SubCbInner;
+            inner
                 .topic
                 .callbacks
                 .lock()
                 .unwrap()
-                .retain(|p| *p != cb as *const _);
+                .retain(|arc| Arc::as_ptr(arc) != cb_ptr);
             *reg = false;
         }
     }
@@ -301,23 +358,21 @@ pub(crate) mod mock {
         unsafe {
             sub_cb_unregister(cb);
             live_cbs().lock().unwrap().retain(|p| *p != cb as usize);
-            drop(Box::from_raw(cb));
+            // Reclaim the FFI handle's Arc and drop. If `notify` is
+            // mid-dispatch on a snapshot containing this entry, that
+            // snapshot's Arc clone keeps the inner alive — only the
+            // last drop frees.
+            drop(Arc::from_raw(cb as *const SubCbInner));
         }
     }
 
     /// Test-only — clear the entire broker so each test runs fresh.
     ///
-    /// We do NOT free leaked `SubCbInner` boxes here even though
-    /// `live_cbs()` knows about them. Subscriptions in the calling
-    /// test still hold raw pointers to those boxes; freeing them
-    /// from `_reset_broker` would race the test's own
-    /// `Subscription::drop` and cause a use-after-free. The boxes
-    /// stay alive (each holding an `Arc<TopicState>` — the topic
-    /// stays alive until the last Subscription drops, then the Arc
-    /// count hits zero), so reset is correct and minimal.
-    ///
-    /// `live_cbs()` is kept in case future test infra wants to
-    /// assert "no leaked subs" at end of test.
+    /// Releases broker-side `Arc<TopicState>` clones. `SubCbInner`
+    /// instances still held by the calling test's Subscriptions
+    /// stay alive (they hold their own `Arc<TopicState>`); fully
+    /// dropping them is `sub_cb_delete`'s job, fired from
+    /// `Subscription::drop`.
     pub fn _reset_broker() {
         broker().lock().unwrap().clear();
     }

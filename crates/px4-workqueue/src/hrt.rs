@@ -187,10 +187,34 @@ pub(crate) mod mock {
     }
 
     pub(crate) unsafe fn cancel(entry: *mut HrtCall) {
+        // Flip the in-band flag first — if the worker is mid-`peek`
+        // it will read this and skip the dispatch.
         // SAFETY: caller guarantees `entry` is a valid HrtCall
         // initialised by a prior `call_after`.
         unsafe {
             (*entry).cancelled.store(true, Ordering::Release);
         }
+        // Then evict the entry from the priority queue.
+        //
+        // Without this, the worker keeps the stale `entry_addr` —
+        // a pointer into the awaiting `Sleep`'s storage — until the
+        // deadline. If `Sleep` drops first (cancellation case), the
+        // queue holds a dangling pointer; reading `cancelled` from
+        // it later races free + reallocate of the same address and
+        // surfaces as glibc's `tcache_thread_shutdown: unaligned
+        // tcache chunk detected` at process exit.
+        //
+        // O(n) over the queue, but cancellations are rare and the
+        // queue is short (one entry per outstanding Sleep).
+        let entry_addr = entry as usize;
+        let w = worker();
+        let mut q = w.queue.lock().unwrap();
+        // BinaryHeap doesn't support remove-by-value. Drain into a
+        // Vec, filter, push back. Order is rebuilt by BinaryHeap's
+        // From<Vec> heapify.
+        let kept: Vec<Pending> = q.drain().filter(|p| p.entry_addr != entry_addr).collect();
+        *q = BinaryHeap::from(kept);
+        // Wake the worker so it re-evaluates its next deadline.
+        w.cv.notify_one();
     }
 }
