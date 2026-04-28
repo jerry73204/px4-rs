@@ -1,0 +1,4 @@
+# Cloned reference repos. Tracked via .gitkeep; the contents live
+# in their own repos and are checked out shallow for browsing.
+*/
+!.gitkeep
