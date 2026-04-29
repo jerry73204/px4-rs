@@ -262,13 +262,84 @@ poll — can't happen here. Two sub-benefits:
 
       Remaining `#[ignore]`d: `example_hello_module`,
       `example_multi_task`. Both depend on `sleep(Duration)`,
-      which arms an HRT compare-match. Renode's `STM32_Timer`
-      model fires the first TIM8 CCR1-match IRQ but not the
-      second after the ISR reprograms CCR1, so anything that
-      re-arms an HRT one-shot stalls after its first deadline.
-      Fix is on the Renode side (`.repl` model swap or upstream
-      patch); the test bodies are direct ports and should pass
-      as-is once HRT compares re-fire.
+      which arms an HRT compare-match. Root-caused to a precise
+      bug in Renode's `STM32_Timer` model.
+
+      **Renode bug** (`renode-infrastructure` `STM32_Timer.cs`,
+      `UpdateCaptureCompareTimer`):
+
+      ```csharp
+      ccTimers[i].Enabled = Enabled
+          && IsInterruptOrOutputEnabled(i)
+          && Value < ccTimers[i].Limit;
+      ```
+
+      The `Value < Limit` check disables the channel whenever
+      `CCR <= CNT`. Real STM32 hardware fires CC1IF whenever
+      `CNT == CCR`, including the case where `CCR <= CNT` —
+      the match happens after `CNT` counts up to `ARR`, wraps to
+      0, and counts up again to `CCR`. PX4's HRT writes
+      `rCCR_HRT = deadline & 0xffff` from inside the ISR, where
+      `deadline = now + delta` and the ISR has been running long
+      enough (Renode-time) that the new low-16 bits often land
+      *behind* the current `CNT`. Renode disables the channel
+      and never re-arms it for the wrap path — the channel only
+      re-arms when the main timer's `LimitReached` fires
+      (autoreload wrap), and at that point `CNT` is back at 0,
+      but the `ccTimers[i].Limit` field still holds the pre-wrap
+      `CCR`. If that `CCR` was set to a value the post-wrap
+      counter will reach (it usually is, since `CCR <= ARR`),
+      the next compare-match WOULD fire — except by then
+      `ccTimers[i].Enabled` is `false` from the prior
+      `UpdateCaptureCompareTimer` call, and the wrap callback
+      doesn't re-evaluate it.
+
+      **Proposed upstream patch** — replace the body of
+      `UpdateCaptureCompareTimer` with a wrap-aware variant that
+      counts the right number of ticks regardless of CCR/CNT
+      ordering:
+
+      ```csharp
+      private void UpdateCaptureCompareTimer(int i)
+      {
+          ccTimers[i].Enabled = Enabled && IsInterruptOrOutputEnabled(i);
+          if (ccTimers[i].Enabled)
+          {
+              if (Value < ccTimers[i].Limit)
+              {
+                  ccTimers[i].Value = Value;
+              }
+              else
+              {
+                  // Wrap case: count to ARR, wrap, then to CCR.
+                  // Express via Value+Limit so the LimitTimer
+                  // sees Value < Limit on ascending count.
+                  var ticksUntilFire = (autoReloadValue - Value)
+                                       + ccTimers[i].Limit + 1;
+                  ccTimers[i].Value = ccTimers[i].Limit > ticksUntilFire
+                      ? ccTimers[i].Limit - ticksUntilFire
+                      : 0;
+              }
+          }
+          ccTimers[i].Direction = Direction;
+      }
+      ```
+
+      Local rebuild blocked by environment: `dotnet-sdk-8.0` not
+      installed (only the runtime is), and the system `Renode`
+      binary at `/opt/renode/bin/Infrastructure.dll` is
+      root-owned. Path forward when someone wants to land the
+      fix locally:
+
+      1. `apt install dotnet-sdk-8.0`
+      2. `cd external/renode/src/Infrastructure/src && dotnet build -c Release Infrastructure_NET.csproj`
+      3. `sudo cp ./bin/Release/net8.0/Infrastructure.dll /opt/renode/bin/Infrastructure.dll`
+      4. Drop the `#[ignore]` markers on the two tests; they pass as-is.
+
+      Cleanest route for px4-rs is to file the patch upstream at
+      `renode/renode-infrastructure` and wait for a release; the
+      submodule pin in `external/renode` then bumps along with
+      the next version of Renode the project supports.
 
       The fixture itself learned to run `work_queue start` then
       `uorb start` on boot (no `rcS` on this board) so individual
