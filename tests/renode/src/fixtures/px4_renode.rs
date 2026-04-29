@@ -192,7 +192,33 @@ impl Px4RenodeSitl {
                 other => other,
             })?;
 
+        // PX4 SITL auto-starts uorb via its `rcS` script; this board
+        // has no ROMFSETC, so we run the equivalent by hand once the
+        // shell is up. Tests that exercise uORB topics need it running
+        // before they shell their own modules. Skip cleanly on
+        // bare-NuttX firmware (no PX4 systemcmds): we look for the
+        // `uorb` builtin in `help` first, and only start it if found.
+        sitl.maybe_start_uorb()?;
+
         Ok(sitl)
+    }
+
+    /// Bring up the daemons that PX4's `rcS` would normally start.
+    /// SITL gets these for free via the POSIX startup script; the
+    /// renode-h743 board has no `ROMFSETC` so they're missing on
+    /// boot. Skip cleanly on bare-NuttX firmware (no PX4 systemcmds).
+    fn maybe_start_uorb(&self) -> Result<()> {
+        let help = self.shell("help")?;
+        if !help.contains("uorb") {
+            return Ok(());
+        }
+        // Order matters: `work_queue` first (Rust modules expecting
+        // `lp_default`/`hp_default` rely on the WorkQueueManager being
+        // up), then `uorb`. Already-running calls are no-ops; either
+        // outcome is fine.
+        let _ = self.shell("work_queue start")?;
+        let _ = self.shell("uorb start")?;
+        Ok(())
     }
 
     /// Run a shell command in the firmware's `nsh` shell. Sends
