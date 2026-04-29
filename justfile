@@ -139,6 +139,17 @@ test-sitl:
 test-renode:
     cd tests/renode && cargo nextest run
 
+# Build the renode-h743 firmware with the SITL externals linked in
+# (e2e_smoke, hello_module, …). Idempotent: re-runs setup-board.sh
+# to mirror any changes from tests/renode/px4-board/, then ninja
+# rebuilds only what changed. Cold build ~3 min; warm rebuild ~5 s.
+build-renode-firmware:
+    bash tests/renode/scripts/setup-board.sh
+    cd $PX4_AUTOPILOT_DIR && \
+        EXTERNAL_MODULES_LOCATION={{justfile_directory()}}/tests/sitl/px4-externals \
+        make px4_renode-h743_default
+    @echo "ELF: $PX4_AUTOPILOT_DIR/build/px4_renode-h743_default/px4_renode-h743_default.elf"
+
 # Validate the Renode platform .repl by loading it into a real
 # Renode and quitting. Faster + simpler than `test-renode` —
 # doesn't need PX4_RENODE_FIRMWARE — and catches .repl parse

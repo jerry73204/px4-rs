@@ -178,7 +178,11 @@ fn compile_trampolines(crate_dir: &Path, px4_dir: &Path) {
                 // PX4's build forcibly includes visibility.h at the
                 // start of every TU; replicate so the __EXPORT /
                 // __BEGIN_DECLS macros resolve.
-                .flag("-includevisibility.h");
+                .flag("-includevisibility.h")
+                // Match the NuttX branch's no-exceptions stance so a
+                // bad `new` returns nullptr on both platforms — the
+                // wrapper relies on that.
+                .flag("-fno-exceptions");
             for inc in posix_includes {
                 let p = px4_dir.join(inc);
                 if p.is_dir() {
@@ -189,8 +193,50 @@ fn compile_trampolines(crate_dir: &Path, px4_dir: &Path) {
         _ => {
             build
                 .define("__PX4_NUTTX", None)
+                .define("__STDC_FORMAT_MACROS", None)
+                .define("__CUSTOM_FILE_IO__", None)
+                .define("_SYS_CDEFS_H_", None)
+                .define("_SYS_REENT_H_", None)
+                .define("NDEBUG", None)
                 .define("MODULE_NAME", "\"px4_rs_wrapper\"")
-                .flag("-includevisibility.h");
+                .flag("-includevisibility.h")
+                // PX4 builds NuttX modules with a curated subset of
+                // libstdc++ — `-nostdinc++` drops the toolchain's
+                // newlib c++ tree so only NuttX's `cxx/` headers
+                // (via `-isystem` below) resolve. Without it, NuttX's
+                // and newlib's `<cmath>` mix and `NAN`/`std::nothrow`
+                // come out undefined. The `-f...` flags match PX4's
+                // common cxx options (no exceptions/RTTI etc.).
+                .flag("-nostdinc++")
+                .flag("-fno-exceptions")
+                .flag("-fno-rtti")
+                .flag("-fno-sized-deallocation")
+                .flag("-fno-threadsafe-statics")
+                .flag("-fcheck-new");
+            // CONFIG_ARCH_BOARD_<UPPERCASE> mirrors what PX4's build
+            // sets; some headers gate behaviour on it.
+            if let Ok(name) = env::var("PX4_RS_BOARD_NAME") {
+                build.define(&format!("CONFIG_ARCH_BOARD_{name}"), None);
+            }
+            for inc in nuttx_includes(&px4_dir, build_dir.as_deref()) {
+                if inc.is_dir() {
+                    build.include(inc);
+                }
+            }
+            // System-include trio that brings NuttX's `<sys/...>`
+            // headers (ioctl.h, etc.) into scope before the bare-metal
+            // toolchain's missing/broken ones. `cc` doesn't have a
+            // dedicated `-isystem` API so we splice the flags
+            // manually.
+            for sys_inc in nuttx_system_includes(&px4_dir) {
+                if sys_inc.is_dir() {
+                    build.flag("-isystem").flag(sys_inc.to_str().unwrap());
+                }
+            }
+            println!("cargo:rerun-if-env-changed=PX4_RS_BOARD_NAME");
+            println!("cargo:rerun-if-env-changed=PX4_RS_BOARD_DIR");
+            println!("cargo:rerun-if-env-changed=PX4_RS_CHIP");
+            println!("cargo:rerun-if-env-changed=PX4_RS_ARCH_FAMILY");
         }
     }
 
@@ -227,4 +273,60 @@ fn compile_trampolines(crate_dir: &Path, px4_dir: &Path) {
     println!("cargo:rerun-if-env-changed=PX4_RS_BUILD_DIR");
 
     build.compile("px4_rs_wrapper");
+}
+
+/// Regular `-I` paths for a NuttX build. `cc` adds them in order; the
+/// later entries don't override earlier ones, so list the most
+/// specific paths first.
+///
+/// `PX4_RS_CHIP` (e.g. `stm32h7`), `PX4_RS_ARCH_FAMILY` (e.g.
+/// `armv7-m`), and `PX4_RS_BOARD_DIR` come from `px4_rust_module()`'s
+/// CMake env. Without them we fall back to safe defaults — the build
+/// will then likely fail on a missing header, but at least cleanly.
+fn nuttx_includes(px4_dir: &Path, build_dir: Option<&Path>) -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+
+    if let Ok(board_dir) = env::var("PX4_RS_BOARD_DIR") {
+        paths.push(PathBuf::from(board_dir).join("src"));
+    }
+    paths.push(px4_dir.join("platforms/nuttx/src/px4/common/include"));
+    if let Ok(chip) = env::var("PX4_RS_CHIP") {
+        // chip values look like `stm32h7`, `stm32f7` — the path
+        // splits the family out of the chip prefix.
+        let (vendor, _) = chip.split_at(chip.find(char::is_numeric).unwrap_or(chip.len()));
+        paths.push(
+            px4_dir
+                .join("platforms/nuttx/src/px4")
+                .join(vendor)
+                .join(&chip)
+                .join("include"),
+        );
+    }
+    if let Ok(arch) = env::var("PX4_RS_ARCH_FAMILY") {
+        paths.push(
+            px4_dir
+                .join("platforms/nuttx/NuttX/nuttx/arch/arm/src")
+                .join(&arch),
+        );
+    }
+    paths.push(px4_dir.join("platforms/nuttx/NuttX/nuttx/arch/arm/src/chip"));
+    paths.push(px4_dir.join("platforms/nuttx/NuttX/nuttx/arch/arm/src/common"));
+    paths.push(px4_dir.join("platforms/nuttx/NuttX/apps/include"));
+
+    if let Some(bd) = build_dir {
+        paths.push(bd.join("external/Install/include"));
+    }
+    paths
+}
+
+/// `-isystem` paths for a NuttX build. These take precedence over the
+/// bare-metal toolchain's defaults so NuttX's `<sys/ioctl.h>`,
+/// `<cstdio>`, etc. resolve before the empty / wrong arm-none-eabi
+/// counterparts.
+fn nuttx_system_includes(px4_dir: &Path) -> Vec<PathBuf> {
+    vec![
+        px4_dir.join("platforms/nuttx/NuttX/include/cxx"),
+        px4_dir.join("platforms/nuttx/NuttX/nuttx/include/cxx"),
+        px4_dir.join("platforms/nuttx/NuttX/nuttx/include"),
+    ]
 }

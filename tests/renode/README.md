@@ -38,14 +38,27 @@ Two prerequisites:
    ```
    On macOS: `brew install --cask renode`. On Windows: the `.msi`
    from <https://renode.io/#downloads>.
-2. **A built `px4_renode_h743.elf`** firmware binary — the output of
-   `make px4_renode_h743_default` once the PX4 board config lands.
+2. **A built `px4_renode-h743_default.elf`** firmware binary. The
+   board template is in `tests/renode/px4-board/`; copy it into
+   PX4-Autopilot and build with `EXTERNAL_MODULES_LOCATION` pointing
+   at the SITL externals tree (so `e2e_smoke`, `hello_module`, etc.
+   end up linked into the firmware):
+
+   ```sh
+   bash tests/renode/scripts/setup-board.sh
+   cd $PX4_AUTOPILOT_DIR
+   EXTERNAL_MODULES_LOCATION=$HOME/repos/px4-rs/tests/sitl/px4-externals \
+       make px4_renode-h743_default
+   ```
+
+   The shorter form is `just build-renode-firmware`.
 
 Set both env vars and run from the workspace root:
 
 ```sh
 RENODE=$(which renode) \
-PX4_RENODE_FIRMWARE=$HOME/repos/PX4-Autopilot/build/px4_renode_h743_default/px4_renode_h743.elf \
+PX4_RENODE_FIRMWARE=$PX4_AUTOPILOT_DIR/build/px4_renode-h743_default/px4_renode-h743_default.elf \
+PX4_RENODE_HAS_PX4=1 \
 just test-renode
 ```
 

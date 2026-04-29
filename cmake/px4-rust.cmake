@@ -119,6 +119,33 @@ function(px4_rust_module)
         "${_manifest_dir}/src/*.rs"
         "${_manifest_dir}/build.rs")
 
+    # NuttX-specific board info — px4-sys's wrapper.cpp needs these to
+    # find `<sys/ioctl.h>` and friends in the NuttX headers, plus
+    # `boards/px4/<board>/src/board_config.h` and the chip's arch
+    # subtree (`platforms/nuttx/src/px4/stm/<chip>/include/`).
+    set(_extra_env)
+    if(_px4_rs_platform STREQUAL "nuttx")
+        list(APPEND _extra_env
+            "PX4_RS_BOARD_NAME=${PX4_BOARD_NAME}"
+            "PX4_RS_BOARD_DIR=${PX4_BOARD_DIR}"
+            "PX4_RS_BOARD_VENDOR=${PX4_BOARD_VENDOR}"
+            "PX4_RS_BOARD_MODEL=${PX4_BOARD_MODEL}"
+            "PX4_RS_CHIP=${CONFIG_ARCH_CHIP}"
+            "PX4_RS_ARCH_FAMILY=${CONFIG_ARCH_FAMILY}")
+    endif()
+
+    # NuttX builds: px4-sys's wrapper.cpp transitively pulls
+    # `<nuttx/config.h>`, which `nuttx_context` generates from the
+    # board's defconfig. The header has to exist before cargo runs,
+    # so depend on the file directly — `add_dependencies(... nuttx_context)`
+    # alone wasn't enough; ninja still scheduled the cargo command in
+    # parallel with `clean_context`'s rm of config.h.
+    set(_extra_deps)
+    if(_px4_rs_platform STREQUAL "nuttx" AND TARGET nuttx_context)
+        list(APPEND _extra_deps
+            "${PX4_SOURCE_DIR}/platforms/nuttx/NuttX/nuttx/include/nuttx/config.h")
+    endif()
+
     add_custom_command(
         OUTPUT  "${_staticlib}"
         COMMAND ${CMAKE_COMMAND} -E env
@@ -126,13 +153,14 @@ function(px4_rust_module)
                 "PX4_RS_BUILD_TRAMPOLINES=1"
                 "PX4_RS_BUILD_DIR=${CMAKE_BINARY_DIR}"
                 "PX4_RS_PLATFORM=${_px4_rs_platform}"
+                ${_extra_env}
                 "CARGO_TARGET_DIR=${_cargo_target_dir}"
                 cargo build
                     --release
                     --target ${ARG_TARGET}
                     --manifest-path "${ARG_MANIFEST}"
                     -p ${ARG_CRATE}
-        DEPENDS ${_rust_sources}
+        DEPENDS ${_rust_sources} ${_extra_deps}
         WORKING_DIRECTORY "${_manifest_dir}"
         COMMENT "Building Rust crate ${ARG_CRATE} for ${ARG_TARGET}"
         VERBATIM)
@@ -140,6 +168,9 @@ function(px4_rust_module)
     # A target other PX4 module rules can `add_dependencies()` against.
     add_custom_target(${ARG_CRATE}_rust_build ALL
         DEPENDS "${_staticlib}")
+    if(_px4_rs_platform STREQUAL "nuttx" AND TARGET nuttx_context)
+        add_dependencies(${ARG_CRATE}_rust_build nuttx_context)
+    endif()
 
     # Imported library wrapping the cargo output. PX4 modules get this
     # as a DEPENDS argument; the linker pulls the symbols in normally.

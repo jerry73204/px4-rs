@@ -35,8 +35,17 @@
 /* these checks assert that PX4's real types match it.                */
 /* ------------------------------------------------------------------ */
 
+/* orb_metadata size depends on pointer width: 24 bytes on 64-bit
+ * POSIX, 16 bytes on 32-bit ARM. Both come from the same field
+ * layout that wrapper.h declares — we just have to assert against
+ * the right total. */
+#if UINTPTR_MAX == 0xFFFFFFFFULL
+static_assert(sizeof(::orb_metadata) == 16,
+              "orb_metadata layout drifted (32-bit target) — wrapper.h is stale");
+#else
 static_assert(sizeof(::orb_metadata) == 24,
-              "orb_metadata grew — Rust wrapper.h is stale");
+              "orb_metadata layout drifted (64-bit target) — wrapper.h is stale");
+#endif
 static_assert(offsetof(::orb_metadata, o_name) == 0,
               "orb_metadata.o_name no longer the first field");
 
@@ -118,7 +127,7 @@ px4_rs_wi_new(const struct px4_rs_wq_config *cfg,
               void *ctx,
               void (*run)(void *)) {
     const auto c = adopt(cfg);
-    auto *wi = new (std::nothrow) RustScheduledWorkItem(name, c, ctx, run);
+    auto *wi = new RustScheduledWorkItem(name, c, ctx, run);
     return reinterpret_cast<px4_rs_work_item *>(wi);
 }
 
@@ -177,7 +186,7 @@ px4_rs_sub_cb_new(const struct orb_metadata *meta,
                   uint8_t instance,
                   void *ctx,
                   void (*call)(void *)) {
-    auto *cb = new (std::nothrow) RustSubscriptionCallback(
+    auto *cb = new RustSubscriptionCallback(
         reinterpret_cast<const ::orb_metadata *>(meta),
         interval_us, instance, ctx, call);
     return reinterpret_cast<px4_rs_sub_cb *>(cb);
