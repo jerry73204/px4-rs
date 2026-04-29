@@ -15,8 +15,17 @@ add_library(drivers_board
 	timer_config.cpp
 )
 
+# `arch_hrt` and `arch_board_reset` are linked into `nuttx_arch` via
+# INTERFACE in `platforms/nuttx/CMakeLists.txt`, but only the link
+# *itself* propagates — the static archive isn't pulled into the
+# final ELF unless something references its symbols. PX4's logger /
+# perf modules call `hrt_absolute_time` etc., which means we need
+# the archive on the link line. Re-add as PRIVATE deps of
+# drivers_board so the dependency walk reaches the ELF link.
 target_link_libraries(drivers_board
 	PRIVATE
 		nuttx_arch
 		px4_layer
+		arch_hrt
+		arch_board_reset
 )

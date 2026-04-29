@@ -29,6 +29,15 @@
  * H7 boards do the same. */
 #include <stm32_gpio.h>
 
+/* High-Resolution Timer. PX4's `arch_hrt` library is wrapped in
+ * `#ifdef HRT_TIMER` — without this define, hrt.c compiles to an
+ * empty object file, leaving every `hrt_absolute_time` /
+ * `hrt_call_*` consumer with unresolved symbols at link time.
+ * fmu-v6c uses TIM8 for the HRT; STM32H7 wires that into APB2,
+ * which Renode models for the timer ticks we need. */
+#define HRT_TIMER               8
+#define HRT_TIMER_CHANNEL       1
+
 /* No SD card; logger writes nowhere. */
 #define BOARD_OVERLOAD_LEDS
 

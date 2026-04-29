@@ -1,11 +1,23 @@
 /****************************************************************************
- * Phase-13 Renode-H743 board init — minimal stub.
+ * Phase-13 Renode-H743 board init — minimal stubs.
  *
- * PX4's NuttX startup calls `board_app_initialize` once after the
- * kernel has come up. Real flight-controller boards use this to
- * mount filesystems, register drivers, configure pins, etc. For
- * our test board, Renode doesn't model any of the peripherals
- * those steps touch — so we do nothing and report success.
+ * Two hooks NuttX's STM32H7 startup expects every H7 board to
+ * provide:
+ *
+ *   * `stm32_boardinitialize`  — called from `__start` very early,
+ *                                before the C runtime is fully up.
+ *                                Real boards configure clocks, set
+ *                                up power rails, light an LED.
+ *                                Renode's emulated H7 needs none of
+ *                                that.
+ *   * `board_app_initialize`   — called once the kernel is alive
+ *                                and userspace is starting. Real
+ *                                boards mount filesystems, register
+ *                                drivers, etc. Our stripped board
+ *                                has no drivers to register.
+ *
+ * Both stubs report success; that's the entire init sequence on a
+ * Renode-emulated board.
  *
  * License: BSD-3-Clause
  ****************************************************************************/
@@ -15,6 +27,10 @@
 #include <stdint.h>
 
 #include <nuttx/board.h>
+
+__EXPORT void stm32_boardinitialize(void)
+{
+}
 
 __EXPORT int board_app_initialize(uintptr_t arg)
 {
