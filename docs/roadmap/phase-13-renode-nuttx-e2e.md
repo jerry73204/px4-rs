@@ -5,7 +5,7 @@ Cortex-M and runs the same `e2e_*` test bodies that
 `tests/sitl/` already runs against POSIX SITL. Closes the ARM-codegen
 + NuttX-scheduler + interrupt-timing gap that POSIX SITL leaves open.
 
-**Status**: Infrastructure + live NuttX-on-H743 boot proven; full PX4 firmware (13.1) tracked separately
+**Status**: Infrastructure + PX4-on-NuttX firmware + shell-driven tests + the SITL externals all linked in. Porting the SITL test bodies (13.6) is the only remaining work.
 **Priority**: P1 (any phase that changes the runtime should run on
 a target-shaped substrate before merge)
 **Depends on**: Phase 11 (the SITL fixture shape we mirror), Phase 12
@@ -134,56 +134,54 @@ poll — can't happen here. Two sub-benefits:
 
 ## Work items
 
-- [/] **13.1-lite** — Stock NuttX `nucleo-h743zi:nsh` boots on
-      Renode, validated end-to-end. Path:
-      `tools/configure.sh nucleo-h743zi:nsh` + add
-      `CONFIG_STM32H7_PWR_IGNORE_ACTVOSRDY=y` (note: this flag
-      doesn't actually exist in PX4's NuttX fork — handled via a
-      Renode-side PWR mock instead, see below) + `make`. Result:
-      `nuttx` ELF (~1.3 MB) that Renode loads and runs through to
-      NuttX's `NuttShell` banner + `nsh>` prompt in 1.7 s warm.
-      The `tests/renode/tests/smoke.rs::fixture_boots_to_nuttx_banner`
-      test gates the boot path — passes live in CI when
-      `PX4_RENODE_FIRMWARE` is set to the NuttX ELF.
-- [/] **13.1** — Full PX4-on-NuttX board config (`px4_renode-h743`).
-      Scaffolding + injection plumbing landed, build progresses
-      most of the way through, blocks on a config gap. Concrete
-      state:
-      * `tests/renode/px4-board/` template branched from fmu-v6c
-        (smallest H7 PX4 board — 268-line defconfig, 4 src files)
-        with drivers + flight stack stripped down to a small
-        systemcmd allow-list (`uorb`, `ver`, `listener`,
-        `work_queue`, `perf`, `top`, `dmesg`, `param`, `reboot`)
-        plus the logger module.
-      * `scripts/setup-board.sh` copies the template into
+- [x] **13.1-lite** — Stock NuttX `nucleo-h743zi:nsh` boots on
+      Renode end-to-end. The `nuttx` ELF (~1.3 MB) reaches the
+      `NuttShell` banner + `nsh>` prompt in 1.7 s warm. Note that
+      the documented Nucleo flag `CONFIG_STM32H7_PWR_IGNORE_ACTVOSRDY`
+      doesn't exist in PX4's NuttX fork — we handle the H7 PWR
+      voltage-scaling poll on the Renode side instead, with a
+      `Python.PythonPeripheral` at 0x58024800 returning 0xFFFFFFFF
+      to all reads. `tests/renode/tests/smoke.rs::fixture_boots_to_nuttx_banner`
+      gates the boot path; passes live when `PX4_RENODE_FIRMWARE`
+      points at the NuttX ELF.
+- [x] **13.1** — Full PX4-on-NuttX board config (`px4_renode-h743`)
+      builds, boots, and runs the shell. ~7 MB ELF; banner appears
+      in 1.7 s warm; `uorb start` then `uorb status` returns the
+      topic table. Concrete state:
+      * `tests/renode/px4-board/` is the board template, branched
+        from fmu-v6c with drivers + flight stack stripped to a
+        small systemcmd allow-list (`uorb`, `ver`, `listener`,
+        `work_queue`, `perf`, `top`, `param`, `reboot`) plus
+        `logger`. `scripts/setup-board.sh` copies it into
         `$PX4_AUTOPILOT_DIR/boards/px4/renode-h743/` (PX4's
-        Makefile uses `find` without `-L`, so a symlink wouldn't
-        be discovered). `scripts/teardown-board.sh` is the inverse
-        with a sentinel guard so we never clobber a user-authored
-        board with the same name.
-      * `make list_config_targets` recognises the board as
-        `px4_renode-h743[_default]`.
-      * `make px4_renode-h743_default` compiles past CMake config
-        and well into the source tree before stalling on
-        `platforms/nuttx/src/px4/common/gpio.c` declaring
-        `stm32_configgpio` implicitly. Baseline `make
-        px4_fmu-v6c_default` builds clean from the same toolchain,
-        so the gap is in our stripped px4board manifest — likely a
-        SYSTEMCMDS or DRIVERS_GPIO Kconfig fmu-v6c enables that
-        we're missing. Next step: bisect the px4board diff against
-        fmu-v6c's manifest, re-enable just enough to satisfy the
-        gpio.c symbol resolution.
-      Once the firmware lands, `tests/renode/tests/pxh.rs` gates
-      flip to live — `PX4_RENODE_HAS_PX4=1`.
-      **Open issue blocking shell-driven tests on bare NuttX**:
-      stock `nucleo-h743zi:nsh` panics shortly after the prompt
-      via `irq_unexpected_isr → PANIC()` on IRQ 120 (MDIOS) — an
-      interrupt Renode's STM32H7 model fires from reset-default
-      state that NuttX hasn't registered a handler for. PX4 board
-      configs can disable MDIOS at the Kconfig level (or simply
-      not enable `CONFIG_STM32H7_MDIOS=y` — fmu-v6c doesn't), so
-      this is expected to dodge itself once the build of 13.1
-      succeeds.
+        Makefile finds boards with `find` and ignores symlinks);
+        `teardown-board.sh` is the sentinel-guarded inverse.
+      * Five fixes were needed past the initial scaffold to get
+        a clean firmware: `#include <stm32_gpio.h>` in
+        `board_config.h` (transitive declaration `gpio.c` needs);
+        `#define HRT_TIMER 8` (gates `arch_hrt`'s
+        `hrt_absolute_time`/`hrt_call_*` symbols into the build —
+        without it, `hrt.c` compiles to an empty object and link
+        fails); empty `stm32_boardinitialize` stub in `init.c`;
+        empty PWM tables in `timer_config.cpp`; defconfig dropping
+        USB CDC ACM, ROMFS/CROMFS, and ROMFSETC (no SD card, no
+        USB, no `/etc/init.d/rcS`).
+      * Two Renode-specific config gaps surfaced after the build
+        succeeded: USART3 RX/TX DMA paths re-fire instantly under
+        Renode's no-baud-rate model, pinning the CPU in the IRQ
+        chain and starving nsh — disabling `CONFIG_USART3_RXDMA`
+        / `CONFIG_USART3_TXDMA` switches USART3 to interrupt-driven
+        mode and frees nsh; and pty writes to `CreateUartPtyTerminal`
+        return EIO once NuttX sets the `FIFOEN` bit (Renode tags
+        bit 29 of CR1 RESERVED), so shell input goes through
+        Renode's monitor (`sysbus.usart3 WriteLine "<cmd>"`) rather
+        than the pty. The fixture reads via the pty and writes via
+        a piped `monitor_stdin`.
+      * `tests/renode/tests/pxh.rs` is live with
+        `PX4_RENODE_HAS_PX4=1`. 5/5 consecutive runs all green.
+      * No `rcS` (we removed ROMFSETC), so `pxh.rs` runs `uorb start`
+        explicitly before `uorb status` — there's no startup script
+        to do it for us.
 - [x] **13.2** — `tests/renode/` workspace skeleton: standalone
       `Cargo.toml`, `rust-toolchain.toml`, `.config/nextest.toml`
       with a `renode` test-group capped at 1 thread.
@@ -202,8 +200,41 @@ poll — can't happen here. Two sub-benefits:
       `ensure_renode_binary!()` macro: a non-interactive
       Renode-spawn that loads the `.repl` and quits, used by
       `tests/probe.rs` for live coverage that doesn't need 13.1.
-- [ ] **13.5** — Reuse `tests/sitl/px4-externals/`. Plumbed once
-      13.1 lands; trivial once the firmware build is in place.
+- [x] **13.5** — Reuse `tests/sitl/px4-externals/`. The renode-h743
+      firmware build now points at the existing SITL externals tree
+      via `EXTERNAL_MODULES_LOCATION` — no duplication. All 8
+      modules (`e2e_smoke`, `e2e_pubsub_pub`, `e2e_pubsub_sub`,
+      `e2e_panic`, `e2e_multi_wq`, `hello_module`, `multi_task`,
+      `gyro_watch`) cross-compile to `thumbv7em-none-eabihf` and
+      appear in nsh's Builtin Apps list. `just build-renode-firmware`
+      is the one-liner.
+
+      Less trivial than the doc anticipated: cross-compiling
+      `px4-sys`'s `wrapper.cpp` for NuttX needed three pieces of
+      build-system work that the SITL/POSIX path didn't exercise:
+
+      * `cmake/px4-rust.cmake` now propagates board info
+        (`PX4_RS_BOARD_NAME`, `_BOARD_DIR`, `_CHIP`, `_ARCH_FAMILY`)
+        and adds an explicit dependency on `nuttx_context`'s
+        generated `<nuttx/config.h>` so the cargo trampoline build
+        doesn't race the `clean_context → mkconfig` step that
+        regenerates it on every build.
+      * `crates/px4-sys/build.rs`'s NuttX branch now adds the full
+        NuttX include set (`platforms/nuttx/src/px4/common/include`,
+        chip-specific `platforms/nuttx/src/px4/<vendor>/<chip>/include`,
+        the `armv7-m`/`chip`/`common` arch dirs, and the
+        `nuttx/include`/`include/cxx` `-isystem` trio), plus
+        `-nostdinc++` + `-fno-exceptions`/`-rtti`/`-sized-deallocation`
+        /`-threadsafe-statics` + `-fcheck-new` to match PX4's
+        embedded-cxx defaults. Without `-nostdinc++` the toolchain's
+        newlib `<cmath>` and NuttX's collide and `NAN` becomes
+        undefined inside `TrajMath.hpp`.
+      * `wrapper.cpp` had a `sizeof(::orb_metadata) == 24` static
+        assertion that was 64-bit-POSIX-only; on 32-bit ARM the
+        struct is 16 bytes. The check is now `#if UINTPTR_MAX ==
+        0xFFFFFFFFULL`-gated. Also dropped `std::nothrow` (NuttX's
+        vendored `<new>` doesn't export it; with `-fno-exceptions`
+        plain `new` returns nullptr on OOM anyway).
 - [ ] **13.6** — Port the existing test bodies. Two are stubbed in
       `tests/renode/tests/smoke.rs` already (boot probe + uorb
       status), with `ensure_renode!()` skip detection. The rest
