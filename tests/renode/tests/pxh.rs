@@ -40,6 +40,11 @@ fn shell_uorb_status_returns_topic_table() {
     }
     let sitl = Px4RenodeSitl::boot().expect("boot Renode");
 
+    // Without an rcS startup script, uorb isn't auto-started. Bring
+    // it up by hand — `uorb start` is part of the systemcmd we link
+    // into the renode-h743 firmware via `default.px4board`.
+    sitl.shell("uorb start").expect("uorb start");
+
     let status = sitl.shell("uorb status").expect("uorb status");
     assert!(
         status.contains("TOPIC NAME") || status.contains("Topics"),
@@ -55,6 +60,7 @@ fn wait_for_log_picks_up_late_lines() {
     }
     let sitl = Px4RenodeSitl::boot().expect("boot Renode");
 
+    sitl.shell("uorb start").expect("uorb start");
     sitl.shell("uorb status").expect("uorb status");
     sitl.wait_for_log("TOPIC NAME", Duration::from_secs(2))
         .expect("uorb status should have produced a header line");

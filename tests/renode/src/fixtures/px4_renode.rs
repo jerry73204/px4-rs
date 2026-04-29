@@ -35,9 +35,10 @@
 //! exercise the platform file without needing firmware (see
 //! [`Px4RenodeSitl::probe_platform`]) gate on that instead.
 
-use std::io::{BufRead, BufReader, Write};
+use std::fmt::Write as _;
+use std::io::Write;
 use std::path::PathBuf;
-use std::process::{Child, Command, ExitStatus, Stdio};
+use std::process::{Child, ChildStdin, Command, ExitStatus, Stdio};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -62,7 +63,7 @@ const BOOT_BANNER: &str = "NuttShell";
 /// prompt in place.
 const NSH_PROMPT: &str = "nsh>";
 
-/// Shared between the pty drainer thread and the test thread.
+/// Shared between a drainer thread and the test thread.
 #[derive(Default)]
 struct LogBuf {
     text: Mutex<String>,
@@ -72,13 +73,27 @@ struct LogBuf {
 /// A live Renode child running PX4 firmware on emulated H7.
 pub struct Px4RenodeSitl {
     child: Mutex<Child>,
-    /// pty master file descriptor; we own it for the duration of the
-    /// fixture and write subcommands to it.
-    pty_master: Mutex<std::fs::File>,
+    /// Renode monitor stdin. We drive USART3 RX through monitor
+    /// `sysbus.usart3 WriteChar` commands rather than writing to the
+    /// pty: once NuttX configures USART3 (sets FIFOEN etc., bits
+    /// Renode marks RESERVED), the pty's master end gets HUP'd and
+    /// further writes return EIO. Renode's monitor doesn't have that
+    /// problem — `WriteChar` synthesises bytes directly into the
+    /// emulated UART regardless of what the firmware's done to it.
+    monitor_stdin: Mutex<ChildStdin>,
     /// Symlink Renode created. Cleaned up on Drop so successive
     /// tests don't collide.
     pty_path: PathBuf,
-    log: Arc<LogBuf>,
+    /// Raw bytes from USART3 — what the firmware actually printed.
+    /// Kept separate from `diag_log` because the three drainers
+    /// (uart, renode-stdout, renode-stderr) share no synchronisation
+    /// at byte granularity; merging them in one buffer slices each
+    /// stream's output across the others' chunks, so `"uorb start"`
+    /// from the UART would never appear contiguously.
+    uart_log: Arc<LogBuf>,
+    /// Renode's own stdout/stderr — useful for diagnostics on a
+    /// failing test, never searched by `shell`.
+    diag_log: Arc<LogBuf>,
 }
 
 impl Px4RenodeSitl {
@@ -116,14 +131,20 @@ impl Px4RenodeSitl {
         );
         let mut child = spawn_renode(&renode, &exec)?;
 
-        // Drain Renode's own stdout + stderr for diagnostics.
-        let log = Arc::new(LogBuf::default());
+        // Renode's own stdout/stderr go into `diag_log` for
+        // diagnostics. The UART pty has its own buffer so shell
+        // searches aren't confused by interleaved Renode warnings.
+        let diag_log = Arc::new(LogBuf::default());
         if let Some(out) = child.stdout.take() {
-            spawn_drainer(out, Arc::clone(&log), "renode-stdout");
+            spawn_drainer(out, Arc::clone(&diag_log));
         }
         if let Some(err) = child.stderr.take() {
-            spawn_drainer(err, Arc::clone(&log), "renode-stderr");
+            spawn_drainer(err, Arc::clone(&diag_log));
         }
+        let monitor_stdin = child
+            .stdin
+            .take()
+            .expect("spawn_renode pipes stdin");
 
         // Renode needs a moment to create the symlink. Poll up to
         // ~5 s; this is a small fraction of the full boot budget
@@ -133,7 +154,7 @@ impl Px4RenodeSitl {
         while !slave_path.exists() {
             if Instant::now() >= symlink_deadline {
                 graceful_kill(&mut child, Duration::from_secs(2));
-                let snapshot = log.text.lock().unwrap().clone();
+                let snapshot = diag_log.text.lock().unwrap().clone();
                 return Err(TestError::BootTimeout {
                     timeout_secs: 5,
                 })
@@ -144,19 +165,23 @@ impl Px4RenodeSitl {
             std::thread::sleep(Duration::from_millis(50));
         }
 
-        // Open Renode's pty master and tail it.
+        // Open Renode's pty master read-write and tail it. Opening
+        // read-only would let the pty drop into a hangup state on
+        // some kernels; we never write to it (see `monitor_stdin`)
+        // but keeping the writeable handle alive avoids the issue.
         let master_file = std::fs::OpenOptions::new()
             .read(true)
             .write(true)
             .open(&slave_path)?;
-        let master_clone = master_file.try_clone()?;
-        spawn_drainer(master_clone, Arc::clone(&log), "uart");
+        let uart_log = Arc::new(LogBuf::default());
+        spawn_drainer(master_file, Arc::clone(&uart_log));
 
         let sitl = Self {
             child: Mutex::new(child),
-            pty_master: Mutex::new(master_file),
+            monitor_stdin: Mutex::new(monitor_stdin),
             pty_path: slave_path,
-            log,
+            uart_log,
+            diag_log,
         };
 
         sitl.wait_for_log(BOOT_BANNER, BOOT_TIMEOUT)
@@ -170,48 +195,58 @@ impl Px4RenodeSitl {
         Ok(sitl)
     }
 
-    /// Run a shell command in the firmware's `nsh`/`pxh` shell.
-    /// Writes `cmd\r\n` to the UART and reads back everything up to
-    /// the next `nsh>` prompt.
+    /// Run a shell command in the firmware's `nsh` shell. Sends
+    /// `cmd\r\n` to USART3 RX one byte at a time via the Renode
+    /// monitor (see `monitor_stdin`), then reads back everything up
+    /// to the next `nsh>` prompt.
+    ///
+    /// nsh prints a double prompt (`\r\nnsh> \x1b[K\r\nnsh> \x1b[K`)
+    /// after every command — likely treats the trailing `\n` as a
+    /// second empty command. To avoid the next call matching the
+    /// stale second prompt, anchor on the command echo before
+    /// scanning for the closing prompt.
     pub fn shell(&self, cmd: &str) -> Result<String> {
-        let pre_len = self.log.text.lock().unwrap().len();
+        // No quote/backslash/cr/lf in command; the monitor's WriteLine
+        // takes a literal double-quoted string and any of those
+        // characters would confuse its parser. Reject early so we
+        // don't silently truncate.
+        assert!(
+            !cmd.contains(['\"', '\\', '\r', '\n']),
+            "shell() cmd must not contain quotes, backslashes, or newlines: {cmd:?}"
+        );
+        let pre_len = self.uart_log.text.lock().unwrap().len();
+        // Use `WriteLine` (one monitor command) instead of N
+        // `WriteChar`s. The per-char form raced — by the time the
+        // 12th `WriteChar` for `uorb status\r\n` had cleared the
+        // monitor parser, earlier bytes had already been processed
+        // and prompts emitted, occasionally leaving the second-prompt
+        // race alive. WriteLine submits the whole line atomically
+        // and only appends one `\r` (no trailing `\n`), eliminating
+        // the empty-line second prompt entirely.
+        let line = format!("sysbus.usart3 WriteLine \"{cmd}\"\n");
         {
-            let mut master = self.pty_master.lock().unwrap();
-            master.write_all(cmd.as_bytes())?;
-            master.write_all(b"\r\n")?;
-            master.flush()?;
+            let mut stdin = self.monitor_stdin.lock().unwrap();
+            stdin.write_all(line.as_bytes())?;
+            stdin.flush()?;
         }
-        // Wait until the next prompt appears beyond `pre_len`.
-        self.wait_for_log_after(NSH_PROMPT, pre_len, Duration::from_secs(10))?;
-        let text = self.log.text.lock().unwrap();
-        let after = &text[pre_len..];
-        Ok(after.to_string())
+        // Wait for the firmware to echo the command back, then for
+        // a prompt after that point. The echo guarantees we're
+        // looking at output produced by *this* shell call rather
+        // than a leftover prompt from the previous one.
+        let echo_end = find_in_log(&self.uart_log, cmd, pre_len, Duration::from_secs(10))?
+            + cmd.len();
+        find_in_log(&self.uart_log, NSH_PROMPT, echo_end, Duration::from_secs(10))?;
+        let text = self.uart_log.text.lock().unwrap();
+        Ok(text[pre_len..].to_string())
     }
 
-    /// Block until `pattern` appears anywhere in the captured
-    /// firmware log, or `timeout` elapses. Returns the matching
-    /// line.
+    /// Block until `pattern` appears anywhere in the firmware's
+    /// UART output, or `timeout` elapses. Returns the surrounding
+    /// line for context.
     pub fn wait_for_log(&self, pattern: &str, timeout: Duration) -> Result<String> {
-        self.wait_for_log_after(pattern, 0, timeout)
-    }
-
-    fn wait_for_log_after(&self, pattern: &str, from: usize, timeout: Duration) -> Result<String> {
-        let deadline = Instant::now() + timeout;
-        let mut text = self.log.text.lock().unwrap();
-        loop {
-            if let Some(line) = find_line(&text[from..], pattern) {
-                return Ok(line);
-            }
-            let now = Instant::now();
-            if now >= deadline {
-                return Err(TestError::LogTimeout {
-                    pattern: pattern.into(),
-                    timeout_secs: timeout.as_secs(),
-                });
-            }
-            let (new_text, _) = self.log.notify.wait_timeout(text, deadline - now).unwrap();
-            text = new_text;
-        }
+        let pos = find_in_log(&self.uart_log, pattern, 0, timeout)?;
+        let text = self.uart_log.text.lock().unwrap();
+        Ok(line_around(&text, pos, pattern))
     }
 
     /// Block up to `timeout` waiting for the Renode child to exit.
@@ -231,10 +266,18 @@ impl Px4RenodeSitl {
         }
     }
 
-    /// Snapshot the entire captured log. Useful for diagnostics on
-    /// a failing test.
+    /// Snapshot the firmware's UART output. Useful for diagnostics
+    /// on a failing test.
     pub fn log_snapshot(&self) -> String {
-        self.log.text.lock().unwrap().clone()
+        self.uart_log.text.lock().unwrap().clone()
+    }
+
+    /// Snapshot Renode's own stdout/stderr — its monitor banner,
+    /// peripheral warnings, and any errors it emits. Independent
+    /// from [`Self::log_snapshot`] so test failures can include
+    /// both halves.
+    pub fn diag_snapshot(&self) -> String {
+        self.diag_log.text.lock().unwrap().clone()
     }
 }
 
@@ -284,10 +327,10 @@ pub fn probe_platform(timeout: Duration) -> Result<ProbeOutcome> {
     let mut child = spawn_renode(&renode, &exec)?;
     let log = Arc::new(LogBuf::default());
     if let Some(out) = child.stdout.take() {
-        spawn_drainer(out, Arc::clone(&log), "renode-stdout");
+        spawn_drainer(out, Arc::clone(&log));
     }
     if let Some(err) = child.stderr.take() {
-        spawn_drainer(err, Arc::clone(&log), "renode-stderr");
+        spawn_drainer(err, Arc::clone(&log));
     }
 
     let deadline = Instant::now() + timeout;
@@ -307,8 +350,10 @@ pub fn probe_platform(timeout: Duration) -> Result<ProbeOutcome> {
 }
 
 /// Spawn `renode --console --plain --disable-xwt -e <exec>` with
-/// stdout/stderr piped + its own process group. Shared by `boot()`
-/// and `probe_platform()`.
+/// stdin/stdout/stderr piped + its own process group. Shared by
+/// `boot()` and `probe_platform()`. Stdin is piped so `boot()` can
+/// drive USART3 RX through the monitor; `probe_platform()` simply
+/// drops the handle.
 fn spawn_renode(renode: &PathBuf, exec: &str) -> Result<Child> {
     let mut cmd = Command::new(renode);
     cmd.arg("--console")
@@ -318,7 +363,7 @@ fn spawn_renode(renode: &PathBuf, exec: &str) -> Result<Child> {
         .arg(exec)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .stdin(Stdio::null());
+        .stdin(Stdio::piped());
     set_new_process_group(&mut cmd);
     Ok(cmd.spawn()?)
 }
@@ -365,26 +410,57 @@ fn repl_path() -> PathBuf {
     manifest.join("platforms").join("px4_renode_h743.repl")
 }
 
-fn find_line(buf: &str, pat: &str) -> Option<String> {
-    buf.lines().find(|l| l.contains(pat)).map(str::to_string)
+/// Wait for `pat` to appear in `log` at or after byte offset `from`,
+/// returning the byte index of the match. Times out with
+/// `LogTimeout`.
+fn find_in_log(log: &LogBuf, pat: &str, from: usize, timeout: Duration) -> Result<usize> {
+    let deadline = Instant::now() + timeout;
+    let mut text = log.text.lock().unwrap();
+    loop {
+        if let Some(rel) = text[from..].find(pat) {
+            return Ok(from + rel);
+        }
+        let now = Instant::now();
+        if now >= deadline {
+            return Err(TestError::LogTimeout {
+                pattern: pat.into(),
+                timeout_secs: timeout.as_secs(),
+            });
+        }
+        let (new_text, _) = log.notify.wait_timeout(text, deadline - now).unwrap();
+        text = new_text;
+    }
 }
 
-fn spawn_drainer<R: std::io::Read + Send + 'static>(
-    reader: R,
-    log: Arc<LogBuf>,
-    tag: &'static str,
-) {
+/// Slice the line containing `pat` at byte offset `pos` in `buf`,
+/// for diagnostic context in the return of [`Px4RenodeSitl::wait_for_log`].
+fn line_around(buf: &str, pos: usize, pat: &str) -> String {
+    let start = buf[..pos].rfind('\n').map(|n| n + 1).unwrap_or(0);
+    let end_search_from = pos + pat.len();
+    let end = buf[end_search_from..]
+        .find('\n')
+        .map(|n| end_search_from + n)
+        .unwrap_or(buf.len());
+    buf[start..end].to_string()
+}
+
+/// Tail a stream byte-by-byte into the shared log. A `BufReader::lines()`
+/// drainer would buffer partial lines indefinitely — the nsh prompt
+/// has no trailing newline, so any line-buffered drain would miss it.
+fn spawn_drainer<R: std::io::Read + Send + 'static>(reader: R, log: Arc<LogBuf>) {
     thread::spawn(move || {
-        let buf = BufReader::new(reader);
-        for line in buf.lines() {
-            let Ok(line) = line else { break };
-            let mut text = log.text.lock().unwrap();
-            text.push('[');
-            text.push_str(tag);
-            text.push_str("] ");
-            text.push_str(&line);
-            text.push('\n');
-            log.notify.notify_all();
+        let mut reader = reader;
+        let mut buf = [0u8; 4096];
+        loop {
+            match reader.read(&mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => {
+                    let chunk = String::from_utf8_lossy(&buf[..n]);
+                    let mut text = log.text.lock().unwrap();
+                    text.push_str(&chunk);
+                    log.notify.notify_all();
+                }
+            }
         }
     });
 }
