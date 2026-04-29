@@ -49,15 +49,19 @@ just gen-msgs     # regenerate Rust bindings from msg/*.msg
 RENODE=/usr/bin/renode \
 PX4_RENODE_FIRMWARE=$PX4_AUTOPILOT_DIR/build/px4_renode-h743_default/px4_renode-h743_default.elf \
 PX4_RENODE_HAS_PX4=1 \
-cargo test -p px4-renode-tests --tests -- --test-threads=1
+just test-renode
 ```
 
-To rebuild the renode-h743 firmware after editing `tests/renode/px4-board/`:
+To rebuild the renode-h743 firmware (with the SITL externals linked in) after editing `tests/renode/px4-board/`:
 
 ```
-bash tests/renode/scripts/setup-board.sh \
-    && (cd $PX4_AUTOPILOT_DIR && make px4_renode-h743_default)
+just build-renode-firmware
 ```
+
+## Known runtime gaps
+
+- **Renode `STM32_Timer` doesn't fire CC compare-match after CCR <= CNT.** Affects two `tests/renode/` tests (`example_hello_module`, `example_multi_task`) that sleep for periods triggering the wrap path. `#[ignore]`d with explanatory file-level docs and a precise root cause + proposed upstream patch in `docs/roadmap/phase-13-renode-nuttx-e2e.md` (work item 13.6). Local rebuild needs `dotnet-sdk-8.0` + `sudo` to swap `/opt/renode/bin/Infrastructure.dll`; cleanest path is an upstream PR to `renode/renode-infrastructure`.
+- All other phase-13 runtime issues are documented in the same place and have landed fixes (USART3 DMA disabled, `yield_now()` calls `usleep(1)` on NuttX, pty pairing replaced by Renode-monitor `WriteLine` for shell input, etc.).
 
 ## Pointers
 
@@ -65,3 +69,4 @@ bash tests/renode/scripts/setup-board.sh \
 - Linking into PX4: `docs/linking-into-px4.md`
 - Async model: `docs/async-model.md`
 - `#[task]` macro: `docs/task-macro.md`
+- Phase-13 (Renode + NuttX e2e): `docs/roadmap/phase-13-renode-nuttx-e2e.md`

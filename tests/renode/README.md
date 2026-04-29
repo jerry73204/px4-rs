@@ -11,15 +11,22 @@ scheduler driving real ARM Cortex-M code.
 
 ## Status
 
-The Rust infrastructure is complete: workspace skeleton,
-`Px4RenodeSitl` fixture, `.repl` + `.resc` platform files, three
-smoke tests, CI integration, `just test-renode` recipe.
+End-to-end working. PX4-on-NuttX firmware boots on emulated
+STM32H743, the fixture drives nsh through Renode's monitor, and 11
+of 13 tests pass live (smoke, probe, pxh, e2e_smoke ×3, multi_wq,
+pubsub, gyro_watch, panic, plus the existing fixture self-tests).
 
-The remaining work is **work item 13.1** in
-[`docs/roadmap/phase-13-renode-nuttx-e2e.md`](../../docs/roadmap/phase-13-renode-nuttx-e2e.md):
-authoring a `px4_renode_h743` PX4 board config that builds a
-no-peripheral NuttX firmware suitable for booting in Renode. Without
-it, every test in this crate skip-returns via `ensure_renode!()`.
+Two tests are `#[ignore]`d behind a precise Renode upstream bug
+in `STM32_Timer.UpdateCaptureCompareTimer` — the wrap-fire path
+of CC compare is broken (`CCR <= CNT` disables the channel
+permanently). PX4's HRT writes a new `CCR` from inside the ISR,
+which often lands behind the current `CNT` once Renode-time has
+advanced; the timer fires once and never again. Affects
+`example_hello_module` and `example_multi_task` (both rely on
+`sleep(Duration)`). The full root-cause analysis, proposed
+upstream patch, and a local-rebuild recipe live under work item
+13.6 in
+[`docs/roadmap/phase-13-renode-nuttx-e2e.md`](../../docs/roadmap/phase-13-renode-nuttx-e2e.md).
 
 ## Running
 
