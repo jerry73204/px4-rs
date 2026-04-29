@@ -5,7 +5,7 @@ Cortex-M and runs the same `e2e_*` test bodies that
 `tests/sitl/` already runs against POSIX SITL. Closes the ARM-codegen
 + NuttX-scheduler + interrupt-timing gap that POSIX SITL leaves open.
 
-**Status**: Infrastructure + PX4-on-NuttX firmware + shell-driven tests + SITL externals all linked in. SITL test bodies all ported; 5 of them `#[ignore]`d behind two well-scoped Renode-side runtime gaps (`yield_now()` not yielding to OS scheduler on NuttX; Renode TIM8 compare IRQ not re-firing after CCR1 reprogram). 6 tests pass live.
+**Status**: Infrastructure + PX4-on-NuttX firmware + shell-driven tests + SITL externals all linked in + SITL test bodies ported. **11 of 13 tests pass live**; 2 are `#[ignore]`d behind a Renode-side HRT compare-IRQ gap that's the next thing to chase.
 **Priority**: P1 (any phase that changes the runtime should run on
 a target-shaped substrate before merge)
 **Depends on**: Phase 11 (the SITL fixture shape we mirror), Phase 12
@@ -237,29 +237,38 @@ poll — can't happen here. Two sub-benefits:
         plain `new` returns nullptr on OOM anyway).
 - [/] **13.6** — Port the existing test bodies. All eight SITL
       test files now have a sibling under `tests/renode/tests/`,
-      same body shape, shelling the same modules. Three tests run
-      live (`gyro_watch`'s threshold banner, `panic`'s log routing,
-      and the existing `smoke`/`probe`/`pxh` set); five are
-      `#[ignore]`d behind two distinct Renode-side runtime gaps
-      that the ports surfaced:
+      same body shape, shelling the same modules. **11 tests pass
+      live**; 2 are `#[ignore]`d behind a Renode-side HRT model gap.
 
-      * `yield_now()` doesn't relinquish to the OS scheduler on
-        NuttX — it just `ScheduleNow → re-poll`s inside the WQ
-        thread. With nothing else queued, lp_default monopolises
-        the CPU and nsh's prompt never lands.  Ignored tests:
-        `e2e_smoke_*`, `multi_wq`, `pubsub`. Fix lives in
-        `px4-workqueue::yield_now` — needs a 0-µs HRT timer or a
-        `sched_yield` on the NuttX path. Once that lands, the
-        `#[ignore]` markers come off and the bodies pass as-is.
-      * Renode's `STM32_Timer` model fires the first compare-match
-        IRQ for TIM8 (PX4's HRT source) but doesn't fire a second
-        one after CCR1 is re-programmed in the ISR. Anything that
-        re-arms an HRT one-shot — `Sleep::poll`, `ScheduleDelayed`,
-        `ScheduleOnInterval` — completes its first deadline and
-        then stalls forever. Ignored tests: `example_hello_module`,
-        `example_multi_task`. Fix is on the Renode side
-        (`.repl` model swap or upstream patch); once HRT
-        compares re-fire, the existing test bodies pass.
+      Live: `smoke`/`probe`/`pxh` (existing); `e2e_smoke_*` (3
+      tests — module start, airspeed topic, listener round-trip);
+      `multi_wq`; `pubsub`; `gyro_watch` (threshold banner only,
+      adapted — SITL's subscriber-count check needs SIH);
+      `panic` (log line only, adapted — NuttX `abort()` from a
+      worker task kills only the task, not the firmware).
+
+      The yield_now-related stalls that `e2e_smoke`, `multi_wq`,
+      and `pubsub` initially hit got fixed by adding a `usleep(1)`
+      to `px4_workqueue::yield_now()` on the NuttX path: PX4's
+      `WorkQueue::Run()` drains its queue tight without
+      sem-waiting between items, so a self-rescheduling task
+      becomes a kernel-level CPU hog. `sched_yield` doesn't help
+      (no same-priority peers), but `usleep(1)` puts the WQ
+      thread on the timed-wait list and forces NuttX to run the
+      scheduler — `nsh` and the idle/serial-RX thread then get
+      their CPU windows. POSIX SITL is unaffected; `usleep(1)`
+      is a near-noop under the lockstep scheduler and the
+      existing `tests/sitl/` suite still runs clean.
+
+      Remaining `#[ignore]`d: `example_hello_module`,
+      `example_multi_task`. Both depend on `sleep(Duration)`,
+      which arms an HRT compare-match. Renode's `STM32_Timer`
+      model fires the first TIM8 CCR1-match IRQ but not the
+      second after the ISR reprograms CCR1, so anything that
+      re-arms an HRT one-shot stalls after its first deadline.
+      Fix is on the Renode side (`.repl` model swap or upstream
+      patch); the test bodies are direct ports and should pass
+      as-is once HRT compares re-fire.
 
       The fixture itself learned to run `work_queue start` then
       `uorb start` on boot (no `rcS` on this board) so individual

@@ -1,33 +1,15 @@
 //! Phase-13.6 port of `tests/sitl/tests/smoke.rs::e2e_smoke_*`.
 //!
-//! ## Currently `#[ignore]`d
+//! Boots renode-h743 firmware, starts the `e2e_smoke` Rust module,
+//! confirms the publication makes it into uORB, and reads it back
+//! through the canonical `listener` path. Exercises the full
+//! `cargo + cc + PX4 link + uORB broker` chain on real ARM Cortex-M7
+//! codegen + NuttX scheduling.
 //!
-//! The `e2e_smoke` module body is a tight `loop { publish; yield_now().await; }`.
-//! On POSIX SITL the pthread that runs `lp_default` shares CPU
-//! cooperatively with the rest of the daemon (lockstep_scheduler),
-//! and `yield_now()` plus pthread preemption gives nsh enough time
-//! to drain its TX buffer and print `nsh>`. On NuttX,
-//! `yield_now()`'s `ScheduleNow → re-poll` round-trip happens
-//! entirely inside the lp_default WorkQueue thread without ever
-//! relinquishing to the kernel scheduler, so the WQ thread monopolises
-//! the CPU and nsh's prompt never lands. Effects:
-//!
-//!  - `e2e_smoke start`'s `info!("started")` from main never makes
-//!    it to the UART (stdio mutex is held by the WQ thread that's
-//!    busy printing the task body's banner first).
-//!  - The shell's wait-for-prompt times out.
-//!  - Any subsequent shell command on the same fixture also times out.
-//!
-//! The fix lives in `px4-workqueue` — `yield_now()` needs to ride a
-//! 0-µs HRT timer or call `sched_yield` on NuttX so the OS scheduler
-//! gets a chance. Tracked separately from phase-13.6 so the rest of
-//! the SITL test surface can land on Renode without waiting on it.
-//!
-//! The first test (`e2e_smoke_starts_and_logs`) is the canary: once
-//! `yield_now()` becomes scheduler-fair on NuttX, drop the `#[ignore]`
-//! and the others (`airspeed_topic_appears_in_uorb_status`,
-//! `listener_airspeed_reads_back_rust_publish`) should pass at the
-//! same time without other changes.
+//! `e2e_smoke`'s task body is a tight `loop { publish; yield_now().await; }`.
+//! On NuttX `yield_now()` calls `usleep(1)` after waking, which forces
+//! the kernel scheduler to run; without that the WQ thread monopolises
+//! the CPU and nsh's prompt never lands.
 
 use std::time::Duration;
 
@@ -44,7 +26,6 @@ fn ensure_pxh() -> bool {
 }
 
 #[test]
-#[ignore = "yield_now starves nsh on NuttX — see file-level docs"]
 fn e2e_smoke_starts_and_logs() {
     ensure_renode!();
     if !ensure_pxh() {
@@ -65,7 +46,6 @@ fn e2e_smoke_starts_and_logs() {
 }
 
 #[test]
-#[ignore = "depends on e2e_smoke — see file-level docs"]
 fn airspeed_topic_appears_in_uorb_status() {
     ensure_renode!();
     if !ensure_pxh() {
@@ -88,7 +68,6 @@ fn airspeed_topic_appears_in_uorb_status() {
 }
 
 #[test]
-#[ignore = "depends on e2e_smoke — see file-level docs"]
 fn listener_airspeed_reads_back_rust_publish() {
     ensure_renode!();
     if !ensure_pxh() {

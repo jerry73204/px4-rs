@@ -1,16 +1,16 @@
 //! Phase-13.6 port of `tests/sitl/tests/multi_wq.rs`.
 //!
-//! See the file-level note in `e2e_smoke.rs` — the same `yield_now()`
-//! starvation hits this module too. Marking `#[ignore]` until the
-//! `px4-workqueue` runtime gap lands. Test body is a direct port so
-//! the fix can flip the marker.
+//! Direct port of the SITL body. `e2e_multi_wq` runs two `#[task]`s
+//! — one on `lp_default`, one on `hp_default` — each printing a
+//! banner on first poll and then yielding. We assert both banners
+//! land; if only one shows up, `#[task(wq = "...")]` isn't actually
+//! routing across queues.
 
 use std::time::Duration;
 
 use px4_renode_tests::{Px4RenodeSitl, ensure_renode};
 
 #[test]
-#[ignore = "yield_now starves nsh on NuttX — see e2e_smoke.rs"]
 fn both_workqueues_run_independently() {
     ensure_renode!();
     if std::env::var_os("PX4_RENODE_HAS_PX4").is_none() {

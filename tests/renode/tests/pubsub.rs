@@ -1,18 +1,18 @@
 //! Phase-13.6 port of `tests/sitl/tests/pubsub.rs`.
 //!
-//! Both halves of this test (`e2e_pubsub_pub` and `e2e_pubsub_sub`)
-//! drive their async loops via `yield_now()`, which doesn't yield
-//! to the OS scheduler on NuttX — the lp_default WorkQueue thread
-//! monopolises the CPU and nsh's prompt never returns. Marking
-//! `#[ignore]` until that runtime gap lands; see `e2e_smoke.rs` for
-//! the long-form note. Test body is a direct port.
+//! Direct port of the SITL body. `e2e_pubsub_pub` publishes
+//! incrementing samples; `e2e_pubsub_sub` subscribes and logs a
+//! `got counter=N` line for every sample it receives. The test starts
+//! the subscriber first (so the broker has a callback registered when
+//! the publisher's first sample lands), then the publisher, and waits
+//! for `counter=10` — proof the round-trip through PX4's broker
+//! actually delivers messages.
 
 use std::time::Duration;
 
 use px4_renode_tests::{Px4RenodeSitl, ensure_renode};
 
 #[test]
-#[ignore = "yield_now starves nsh on NuttX — see e2e_smoke.rs"]
 fn pubsub_round_trip() {
     ensure_renode!();
     if std::env::var_os("PX4_RENODE_HAS_PX4").is_none() {
