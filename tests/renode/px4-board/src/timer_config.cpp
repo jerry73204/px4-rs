@@ -21,4 +21,4 @@ constexpr io_timers_channel_mapping_t io_timers_channel_mapping =
 
 constexpr io_timers_t led_pwm_timers[MAX_LED_TIMERS] = {};
 
-constexpr led_pwm_timer_channel_t led_pwm_channels[MAX_TIMER_LED_CHANNELS] = {};
+constexpr timer_io_channels_t led_pwm_channels[MAX_TIMER_LED_CHANNELS] = {};

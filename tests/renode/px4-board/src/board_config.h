@@ -20,6 +20,15 @@
 #include <nuttx/compiler.h>
 #include <stdint.h>
 
+/* `<stm32_gpio.h>` brings the `stm32_configgpio()` family into scope
+ * for `platforms/nuttx/src/px4/common/gpio.c`, which calls them
+ * via the `px4_arch_configgpio` macro defined in `micro_hal.h`.
+ * Without this transitive include, gpio.c fails with `implicit
+ * declaration of function 'stm32_configgpio'` (turned into an
+ * error by `-Werror=implicit-function-declaration`). PX4's other
+ * H7 boards do the same. */
+#include <stm32_gpio.h>
+
 /* No SD card; logger writes nowhere. */
 #define BOARD_OVERLOAD_LEDS
 
