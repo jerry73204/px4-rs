@@ -26,10 +26,12 @@
 
 mod ffi;
 mod pub_;
+mod raw;
 mod sub;
 mod topic;
 
 pub use pub_::{PubError, Publication};
+pub use raw::{RawPubError, RawPublication, RawSubscription};
 pub use sub::{Recv, Subscription};
 pub use topic::{OrbMetadata, UorbTopic};
 
