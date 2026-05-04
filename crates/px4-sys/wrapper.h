@@ -161,6 +161,11 @@ px4_rs_sub_cb *px4_rs_sub_cb_new(const struct orb_metadata *meta,
 bool px4_rs_sub_cb_register(px4_rs_sub_cb *cb);
 void px4_rs_sub_cb_unregister(px4_rs_sub_cb *cb);
 bool px4_rs_sub_cb_update(px4_rs_sub_cb *cb, void *dst);
+/* Phase 108.C.uorb.2 — drain + return the cumulative count of
+ * publishes that landed on this topic between successful update()s.
+ * Used by px4-uorb's RawSubscription::missed_count() to fire the
+ * nros MessageLost status event. */
+uint32_t px4_rs_sub_cb_lost_take(px4_rs_sub_cb *cb);
 void px4_rs_sub_cb_delete(px4_rs_sub_cb *cb);
 
 #ifdef __cplusplus

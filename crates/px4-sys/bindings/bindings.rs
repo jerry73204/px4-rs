@@ -173,5 +173,8 @@ extern "C" {
     pub fn px4_rs_sub_cb_update(cb: *mut px4_rs_sub_cb, dst: *mut ::core::ffi::c_void) -> bool;
 }
 extern "C" {
+    pub fn px4_rs_sub_cb_lost_take(cb: *mut px4_rs_sub_cb) -> u32;
+}
+extern "C" {
     pub fn px4_rs_sub_cb_delete(cb: *mut px4_rs_sub_cb);
 }

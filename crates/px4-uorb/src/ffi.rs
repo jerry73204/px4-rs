@@ -69,15 +69,12 @@ mod real {
     }
 
     /// Take + clear the accumulated count of messages dropped between
-    /// the subscriber's last observed sample and the most recent
-    /// publication. Real-PX4 path stub: requires a `px4_rs_sub_cb_lost`
-    /// FFI binding that doesn't exist yet (Phase 108.C.uorb.2 follow-up).
-    /// Returns 0 until landed.
-    #[allow(unused_variables)]
+    /// the subscriber's previous and most recent successful
+    /// `sub_cb_update`. Phase 108.C.uorb.2 — wired via
+    /// `px4_rs_sub_cb_lost_take` in the C wrapper, which tracks
+    /// publish-callback fires and computes the gap on each update.
     pub(crate) unsafe fn sub_cb_lost_take(cb: *mut SubCb) -> u32 {
-        // TODO: bind `px4_rs_sub_cb_lost_take(cb)` (or use
-        // `orb_check_with_stats`) on the C side and route here.
-        0
+        unsafe { px4_sys::px4_rs_sub_cb_lost_take(cb) }
     }
 
     #[allow(dead_code)]

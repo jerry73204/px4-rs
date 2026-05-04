@@ -24,6 +24,7 @@
 
 #include "wrapper.h"
 
+#include <atomic>
 #include <new>
 #include <cstring>
 #include <cstdlib>
@@ -171,11 +172,44 @@ public:
         : uORB::SubscriptionCallback(meta, interval_us, instance),
           _ctx(ctx), _call(call) {}
 
-    void call() override { if (_call) _call(_ctx); }
+    /* Each publish on this topic causes uORB to invoke `call()` on the
+     * subscription's registered callback. We track the count here so
+     * `updateTrackLost` can compute how many publishes happened
+     * between two successful `update()` deliveries — that delta minus
+     * one (the one we delivered) is the lost-message count. */
+    void call() override {
+        _publish_count.fetch_add(1, std::memory_order_relaxed);
+        if (_call) _call(_ctx);
+    }
+
+    /* Wrapper around `Subscription::update(dst)` that accumulates the
+     * lost-message count when a publish/poll race causes the
+     * subscriber to skip samples. The accumulator is drained by
+     * `lostTake()`. Phase 108.C.uorb.2 (real-PX4 path). */
+    bool updateTrackLost(void *dst) {
+        bool ok = update(dst);
+        if (ok) {
+            uint32_t pubs_now = _publish_count.load(std::memory_order_relaxed);
+            uint32_t prev = _last_pubs_at_update.exchange(pubs_now,
+                                                          std::memory_order_relaxed);
+            uint32_t delta = pubs_now - prev;
+            if (delta > 1) {
+                _lost_accum.fetch_add(delta - 1, std::memory_order_relaxed);
+            }
+        }
+        return ok;
+    }
+
+    uint32_t lostTake() {
+        return _lost_accum.exchange(0, std::memory_order_relaxed);
+    }
 
 private:
     void *_ctx;
     void (*_call)(void *);
+    std::atomic<uint32_t> _publish_count{0};
+    std::atomic<uint32_t> _last_pubs_at_update{0};
+    std::atomic<uint32_t> _lost_accum{0};
 };
 
 } // namespace
@@ -201,7 +235,14 @@ extern "C" void px4_rs_sub_cb_unregister(px4_rs_sub_cb *cb) {
 }
 
 extern "C" bool px4_rs_sub_cb_update(px4_rs_sub_cb *cb, void *dst) {
-    return reinterpret_cast<RustSubscriptionCallback *>(cb)->update(dst);
+    return reinterpret_cast<RustSubscriptionCallback *>(cb)->updateTrackLost(dst);
+}
+
+/* Phase 108.C.uorb.2 (real-PX4 path) — drain + return the count of
+ * publishes that landed between the previous and most recent
+ * successful `px4_rs_sub_cb_update` call. */
+extern "C" uint32_t px4_rs_sub_cb_lost_take(px4_rs_sub_cb *cb) {
+    return reinterpret_cast<RustSubscriptionCallback *>(cb)->lostTake();
 }
 
 extern "C" void px4_rs_sub_cb_delete(px4_rs_sub_cb *cb) {
