@@ -251,6 +251,26 @@ impl RawSubscription {
     pub fn metadata(&self) -> &'static orb_metadata {
         self.metadata
     }
+
+    /// Phase 108.C.uorb.2 — drain the accumulated count of messages
+    /// published on this topic that this subscriber missed (because
+    /// `try_recv` was not called frequently enough). Returns the count
+    /// since the previous call and resets to 0.
+    ///
+    /// Std host (mock broker): exact count via the broker's per-topic
+    /// seq number.
+    /// Real PX4: returns 0 until a `px4_rs_sub_cb_lost_take` C-side
+    /// binding is added (see `ffi.rs`).
+    pub fn missed_count(&self) -> u32 {
+        let cb = self.cb.get();
+        if cb.is_null() {
+            return 0;
+        }
+        // SAFETY: cb was set by ensure_registered and is alive until
+        // this RawSubscription is dropped (which also calls
+        // sub_cb_delete). sub_cb_lost_take is internally Sync.
+        unsafe { ffi::sub_cb_lost_take(cb) }
+    }
 }
 
 impl Drop for RawSubscription {

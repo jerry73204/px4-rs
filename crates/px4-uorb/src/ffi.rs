@@ -68,6 +68,18 @@ mod real {
         unsafe { px4_sys::px4_rs_sub_cb_update(cb, dst) }
     }
 
+    /// Take + clear the accumulated count of messages dropped between
+    /// the subscriber's last observed sample and the most recent
+    /// publication. Real-PX4 path stub: requires a `px4_rs_sub_cb_lost`
+    /// FFI binding that doesn't exist yet (Phase 108.C.uorb.2 follow-up).
+    /// Returns 0 until landed.
+    #[allow(unused_variables)]
+    pub(crate) unsafe fn sub_cb_lost_take(cb: *mut SubCb) -> u32 {
+        // TODO: bind `px4_rs_sub_cb_lost_take(cb)` (or use
+        // `orb_check_with_stats`) on the C side and route here.
+        0
+    }
+
     #[allow(dead_code)]
     pub(crate) unsafe fn sub_cb_unregister(cb: *mut SubCb) {
         unsafe { px4_sys::px4_rs_sub_cb_unregister(cb) }
@@ -89,6 +101,7 @@ pub(crate) mod mock {
     //! most recent message without re-delivering.
 
     use core::ffi::c_void;
+    use core::sync::atomic::{AtomicU32, Ordering};
     use std::collections::HashMap;
     use std::ffi::CStr;
     use std::sync::{Arc, Mutex, OnceLock};
@@ -106,6 +119,10 @@ pub(crate) mod mock {
         call: Option<unsafe extern "C" fn(*mut c_void)>,
         registered: Mutex<bool>,
         size: usize,
+        /// Phase 108.C.uorb.2 — count of messages published between the
+        /// subscriber's previous observed seq and the seq it advances to
+        /// on the next `sub_cb_update`. Drained by `sub_cb_lost_take`.
+        lost: AtomicU32,
     }
 
     /// Shared state for one topic.
@@ -278,6 +295,7 @@ pub(crate) mod mock {
             ctx: ctx as usize,
             call: Some(call),
             registered: Mutex::new(false),
+            lost: AtomicU32::new(0),
         });
         let raw = Arc::into_raw(cb) as *mut SubCb;
         live_cbs().lock().unwrap().push(raw as usize);
@@ -325,6 +343,15 @@ pub(crate) mod mock {
         let cur = *inner.topic.seq.lock().unwrap();
         let mut last = inner.last_seen.lock().unwrap();
         if cur > *last {
+            // Phase 108.C.uorb.2 — every seq we step over without
+            // delivering counts as a lost message. Stepping from
+            // last_seen=N to cur=N+1 delivers exactly 1 sample
+            // (no loss); stepping to cur=N+K skips K-1 samples.
+            let skipped = (cur - *last).saturating_sub(1);
+            if skipped > 0 {
+                let bumped = u32::try_from(skipped).unwrap_or(u32::MAX);
+                inner.lost.fetch_add(bumped, Ordering::Relaxed);
+            }
             let data = inner.topic.data.lock().unwrap();
             unsafe {
                 std::ptr::copy_nonoverlapping(data.as_ptr(), dst as *mut u8, inner.size);
@@ -334,6 +361,14 @@ pub(crate) mod mock {
         } else {
             false
         }
+    }
+
+    /// Phase 108.C.uorb.2 — drain the accumulated lost-message
+    /// counter for this subscriber. Returns the count seen since the
+    /// previous call (or since cb creation) and resets to 0.
+    pub(crate) unsafe fn sub_cb_lost_take(cb: *mut SubCb) -> u32 {
+        let inner = unsafe { cb_ref(cb) };
+        inner.lost.swap(0, Ordering::Relaxed)
     }
 
     pub(crate) unsafe fn sub_cb_unregister(cb: *mut SubCb) {
