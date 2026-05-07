@@ -3,8 +3,10 @@
 #![cfg(feature = "std")]
 #![feature(type_alias_impl_trait)]
 
-use core::future::Future;
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::{
+    future::Future,
+    sync::atomic::{AtomicU32, Ordering},
+};
 
 use px4_workqueue::{Channel, WorkItemCell, drain_until_idle, wq_configurations};
 

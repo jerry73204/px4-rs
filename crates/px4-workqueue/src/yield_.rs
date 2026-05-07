@@ -48,9 +48,11 @@
 //! either way. Gated `cfg(target_os = "none")` so host-mock tests
 //! (cargo test) skip the libc call cleanly.
 
-use core::future::Future;
-use core::pin::Pin;
-use core::task::{Context, Poll};
+use core::{
+    future::Future,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 /// Yield once. The first `poll` registers the calling task's waker
 /// for re-schedule and returns `Pending`; the next `poll` returns

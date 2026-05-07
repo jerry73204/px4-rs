@@ -11,9 +11,11 @@
 //! group at 1 thread, so only one process is ever in this code path
 //! at a time.
 
-use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::OnceLock;
+use std::{
+    path::{Path, PathBuf},
+    process::Command,
+    sync::OnceLock,
+};
 
 use crate::{Result, TestError};
 
@@ -33,10 +35,7 @@ fn build() -> Result<PathBuf> {
 
     let status = Command::new("make")
         .arg("px4_sitl")
-        .arg(format!(
-            "EXTERNAL_MODULES_LOCATION={}",
-            externals.display()
-        ))
+        .arg(format!("EXTERNAL_MODULES_LOCATION={}", externals.display()))
         .current_dir(&px4)
         // PX4's make wrapper prints a fair amount; let it stream so
         // failures are debuggable. The OnceLock means this only runs

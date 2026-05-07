@@ -8,18 +8,18 @@
 //! The `#[repr(C)]` prefix `TaskStateBits` is what `Waker`s point at,
 //! so a single universal `RawWakerVTable` can service every F.
 
-use core::cell::UnsafeCell;
-use core::future::Future;
-use core::marker::PhantomPinned;
-use core::mem::MaybeUninit;
-use core::pin::Pin;
-use core::ptr;
-use core::sync::atomic::{AtomicPtr, AtomicU8, Ordering};
-use core::task::{Context, Poll, RawWaker, Waker};
+use core::{
+    cell::UnsafeCell,
+    future::Future,
+    marker::PhantomPinned,
+    mem::MaybeUninit,
+    pin::Pin,
+    ptr,
+    sync::atomic::{AtomicPtr, AtomicU8, Ordering},
+    task::{Context, Poll, RawWaker, Waker},
+};
 
-use crate::ffi;
-use crate::waker::WAKER_VTABLE;
-use crate::wq::WqConfig;
+use crate::{ffi, waker::WAKER_VTABLE, wq::WqConfig};
 
 /// State bits. Kept in a `#[repr(C)]` struct so the waker data pointer
 /// can refer to just the bits (no type erasure needed on the waker path).

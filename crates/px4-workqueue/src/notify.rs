@@ -33,10 +33,12 @@
 //! }
 //! ```
 
-use core::future::Future;
-use core::pin::Pin;
-use core::sync::atomic::{AtomicBool, Ordering};
-use core::task::{Context, Poll};
+use core::{
+    future::Future,
+    pin::Pin,
+    sync::atomic::{AtomicBool, Ordering},
+    task::{Context, Poll},
+};
 
 use crate::AtomicWaker;
 

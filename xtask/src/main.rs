@@ -1,9 +1,10 @@
 //! px4-rs xtask — codegen helpers invoked from the `just` recipes.
 
-use std::env;
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::ExitCode;
+use std::{
+    env, fs,
+    path::{Path, PathBuf},
+    process::ExitCode,
+};
 
 fn main() -> ExitCode {
     let mut args = env::args().skip(1);

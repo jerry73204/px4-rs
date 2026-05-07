@@ -50,11 +50,15 @@ pub(crate) mod mock {
     //! need: ordered timer fires that wake the right task.
 
     use core::ffi::c_void;
-    use std::collections::BinaryHeap;
-    use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::{Condvar, Mutex, OnceLock};
-    use std::thread;
-    use std::time::{Duration, Instant};
+    use std::{
+        collections::BinaryHeap,
+        sync::{
+            Condvar, Mutex, OnceLock,
+            atomic::{AtomicBool, Ordering},
+        },
+        thread,
+        time::{Duration, Instant},
+    };
 
     /// Mirrors `px4_sys::hrt_call`: 64-byte opaque buffer. We only
     /// use the first byte (a `cancelled` flag) but keep the size so

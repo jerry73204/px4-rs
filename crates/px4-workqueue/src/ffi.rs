@@ -42,10 +42,14 @@ pub(crate) mod mock {
     //! a direct analogue of PX4's `WorkQueue::Run()`.
 
     use core::ffi::{c_char, c_void};
-    use std::boxed::Box;
-    use std::sync::mpsc::{Sender, channel};
-    use std::sync::{Mutex, OnceLock};
-    use std::thread;
+    use std::{
+        boxed::Box,
+        sync::{
+            Mutex, OnceLock,
+            mpsc::{Sender, channel},
+        },
+        thread,
+    };
 
     #[doc(hidden)]
     pub struct WorkItem {

@@ -1,17 +1,18 @@
 //! Typed `Subscription<T>` + async `recv()`.
 
-use core::cell::Cell;
-use core::ffi::c_void;
-use core::future::Future;
-use core::marker::{PhantomData, PhantomPinned};
-use core::mem::MaybeUninit;
-use core::pin::Pin;
-use core::task::{Context, Poll};
+use core::{
+    cell::Cell,
+    ffi::c_void,
+    future::Future,
+    marker::{PhantomData, PhantomPinned},
+    mem::MaybeUninit,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 use px4_workqueue::AtomicWaker;
 
-use crate::ffi;
-use crate::topic::UorbTopic;
+use crate::{ffi, topic::UorbTopic};
 
 /// Typed subscriber.
 ///

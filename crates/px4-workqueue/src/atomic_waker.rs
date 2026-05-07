@@ -21,9 +21,11 @@
 //! steal the registration, and WAITING → WAKING to invoke the stored
 //! waker. The inline comments preserve the upstream ordering constants.
 
-use core::cell::UnsafeCell;
-use core::sync::atomic::{AtomicUsize, Ordering};
-use core::task::Waker;
+use core::{
+    cell::UnsafeCell,
+    sync::atomic::{AtomicUsize, Ordering},
+    task::Waker,
+};
 
 const WAITING: usize = 0;
 const REGISTERING: usize = 0b01;

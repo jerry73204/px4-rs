@@ -16,7 +16,8 @@ fn hello_module_ticks_at_least_twice() {
     ensure_px4!();
     let sitl = Px4Sitl::boot().expect("boot SITL");
 
-    sitl.shell("hello_module start").expect("hello_module start");
+    sitl.shell("hello_module start")
+        .expect("hello_module start");
     sitl.wait_for_log("ticker started", Duration::from_secs(2))
         .expect("task body never reached its banner");
 

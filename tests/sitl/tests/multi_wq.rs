@@ -15,7 +15,8 @@ fn both_workqueues_run_independently() {
     ensure_px4!();
     let sitl = Px4Sitl::boot().expect("boot SITL");
 
-    sitl.shell("e2e_multi_wq start").expect("e2e_multi_wq start");
+    sitl.shell("e2e_multi_wq start")
+        .expect("e2e_multi_wq start");
 
     sitl.wait_for_log("lp_default tick alive", Duration::from_secs(3))
         .expect("lp_default task never reached its banner");

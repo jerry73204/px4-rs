@@ -2,11 +2,15 @@
 //! prefix of every `WorkItemCell<F>` — so this vtable is universal
 //! across all F.
 
-use core::sync::atomic::Ordering;
-use core::task::{RawWaker, RawWakerVTable};
+use core::{
+    sync::atomic::Ordering,
+    task::{RawWaker, RawWakerVTable},
+};
 
-use crate::cell::{RUN_QUEUED, SPAWNED, TaskStateBits};
-use crate::ffi;
+use crate::{
+    cell::{RUN_QUEUED, SPAWNED, TaskStateBits},
+    ffi,
+};
 
 pub(crate) static WAKER_VTABLE: RawWakerVTable =
     RawWakerVTable::new(waker_clone, waker_wake, waker_wake_by_ref, waker_drop);

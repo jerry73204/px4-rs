@@ -18,15 +18,19 @@
 //! 3-second grace period. Without this, an orphan daemon would hold
 //! MAVLink UDP ports across the next test invocation.
 
-use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
-use std::process::{Child, Command, ExitStatus, Stdio};
-use std::sync::{Arc, Condvar, Mutex};
-use std::thread;
-use std::time::{Duration, Instant};
+use std::{
+    io::{BufRead, BufReader},
+    path::PathBuf,
+    process::{Child, Command, ExitStatus, Stdio},
+    sync::{Arc, Condvar, Mutex},
+    thread,
+    time::{Duration, Instant},
+};
 
-use crate::process::{graceful_kill, set_new_process_group};
-use crate::{Result, TestError};
+use crate::{
+    Result, TestError,
+    process::{graceful_kill, set_new_process_group},
+};
 
 use super::build;
 
@@ -85,11 +89,14 @@ impl Px4Sitl {
             log,
         };
 
-        sitl.wait_for_log("Startup script returned successfully", Duration::from_secs(15))
-            .map_err(|e| match e {
-                TestError::LogTimeout { .. } => TestError::BootTimeout { timeout_secs: 15 },
-                other => other,
-            })?;
+        sitl.wait_for_log(
+            "Startup script returned successfully",
+            Duration::from_secs(15),
+        )
+        .map_err(|e| match e {
+            TestError::LogTimeout { .. } => TestError::BootTimeout { timeout_secs: 15 },
+            other => other,
+        })?;
 
         Ok(sitl)
     }
@@ -107,10 +114,7 @@ impl Px4Sitl {
                 status: -1,
             });
         }
-        let bin = self
-            .build_dir
-            .join("bin")
-            .join(format!("px4-{modname}"));
+        let bin = self.build_dir.join("bin").join(format!("px4-{modname}"));
         let out = Command::new(&bin)
             .args(&parts[1..])
             .current_dir(&self.build_dir)

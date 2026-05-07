@@ -25,18 +25,19 @@
 //! }
 //! ```
 
-use core::cell::UnsafeCell;
-use core::ffi::c_void;
-use core::future::Future;
-use core::marker::PhantomPinned;
-use core::mem::MaybeUninit;
-use core::pin::Pin;
-use core::sync::atomic::{AtomicU8, Ordering};
-use core::task::{Context, Poll};
-use core::time::Duration;
+use core::{
+    cell::UnsafeCell,
+    ffi::c_void,
+    future::Future,
+    marker::PhantomPinned,
+    mem::MaybeUninit,
+    pin::Pin,
+    sync::atomic::{AtomicU8, Ordering},
+    task::{Context, Poll},
+    time::Duration,
+};
 
-use crate::AtomicWaker;
-use crate::hrt;
+use crate::{AtomicWaker, hrt};
 
 const STATE_IDLE: u8 = 0;
 const STATE_ARMED: u8 = 1;

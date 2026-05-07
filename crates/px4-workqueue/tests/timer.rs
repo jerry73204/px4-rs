@@ -7,9 +7,11 @@
 #![cfg(feature = "std")]
 #![feature(type_alias_impl_trait)]
 
-use core::future::Future;
-use core::sync::atomic::{AtomicU32, Ordering};
-use core::time::Duration;
+use core::{
+    future::Future,
+    sync::atomic::{AtomicU32, Ordering},
+    time::Duration,
+};
 use std::time::Instant;
 
 use px4_workqueue::{WorkItemCell, drain_until_idle, sleep, wq_configurations};

@@ -3,10 +3,12 @@
 #![cfg(feature = "std")]
 #![feature(type_alias_impl_trait)]
 
-use core::future::Future;
-use core::pin::Pin;
-use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use core::task::{Context, Poll};
+use core::{
+    future::Future,
+    pin::Pin,
+    sync::atomic::{AtomicBool, AtomicU32, Ordering},
+    task::{Context, Poll},
+};
 
 use px4_workqueue::{AtomicWaker, drain_until_idle, task};
 

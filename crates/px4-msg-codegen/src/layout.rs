@@ -6,11 +6,12 @@
 //! in the PX4 source tree (v1.16.2). Keeping byte-for-byte parity with
 //! the C++ output is phase 05's whole job.
 
-use std::collections::HashMap;
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
-use crate::model::{Constant, Field, FieldType, MsgDef, ParseError};
-use crate::parser;
+use crate::{
+    model::{Constant, Field, FieldType, MsgDef, ParseError},
+    parser,
+};
 
 const ALIGN_TO: usize = 8;
 

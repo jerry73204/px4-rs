@@ -1,12 +1,13 @@
 //! Typed `Publication<T>`.
 
-use core::ffi::c_void;
-use core::marker::PhantomData;
-use core::mem::MaybeUninit;
-use core::sync::atomic::{AtomicPtr, Ordering};
+use core::{
+    ffi::c_void,
+    marker::PhantomData,
+    mem::MaybeUninit,
+    sync::atomic::{AtomicPtr, Ordering},
+};
 
-use crate::ffi;
-use crate::topic::UorbTopic;
+use crate::{ffi, topic::UorbTopic};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PubError {

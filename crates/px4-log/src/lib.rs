@@ -38,8 +38,10 @@
 
 #[cfg(not(feature = "std"))]
 use core::ffi::c_int;
-use core::ffi::{CStr, c_char};
-use core::fmt::{self, Write};
+use core::{
+    ffi::{CStr, c_char},
+    fmt::{self, Write},
+};
 
 // Panic handler lives in the user's module crate via the
 // `px4_log::panic_handler!()` macro. See the macro docs below.

@@ -24,10 +24,12 @@
 //!   `SubscriptionCallback` records the address of the embedded
 //!   `AtomicWaker` as its callback context.
 
-use core::cell::Cell;
-use core::ffi::c_void;
-use core::marker::PhantomData;
-use core::sync::atomic::{AtomicPtr, Ordering};
+use core::{
+    cell::Cell,
+    ffi::c_void,
+    marker::PhantomData,
+    sync::atomic::{AtomicPtr, Ordering},
+};
 
 use px4_sys::orb_metadata;
 use px4_workqueue::AtomicWaker;
@@ -85,11 +87,20 @@ impl RawPublication {
             // SAFETY: metadata is 'static; initial points at o_size
             // bytes (just verified).
             let h = unsafe {
-                ffi::advertise_multi(self.metadata, initial.as_ptr() as *const c_void, &mut instance)
+                ffi::advertise_multi(
+                    self.metadata,
+                    initial.as_ptr() as *const c_void,
+                    &mut instance,
+                )
             };
             if self
                 .handle
-                .compare_exchange(core::ptr::null_mut(), h, Ordering::AcqRel, Ordering::Acquire)
+                .compare_exchange(
+                    core::ptr::null_mut(),
+                    h,
+                    Ordering::AcqRel,
+                    Ordering::Acquire,
+                )
                 .is_err()
             {
                 // SAFETY: we just allocated h via advertise_multi.
@@ -117,7 +128,12 @@ impl RawPublication {
             let h = unsafe { ffi::advertise(self.metadata, initial) };
             if self
                 .handle
-                .compare_exchange(core::ptr::null_mut(), h, Ordering::AcqRel, Ordering::Acquire)
+                .compare_exchange(
+                    core::ptr::null_mut(),
+                    h,
+                    Ordering::AcqRel,
+                    Ordering::Acquire,
+                )
                 .is_err()
             {
                 // SAFETY: we just allocated h.
@@ -135,8 +151,7 @@ impl RawPublication {
         let handle = self.handle.load(Ordering::Acquire);
         // SAFETY: handle is non-null after ensure_advertised; data.len()
         // matches metadata.o_size.
-        let rc =
-            unsafe { ffi::publish(self.metadata, handle, data.as_ptr() as *const c_void) };
+        let rc = unsafe { ffi::publish(self.metadata, handle, data.as_ptr() as *const c_void) };
         if rc == 0 {
             Ok(())
         } else {
@@ -185,11 +200,7 @@ impl RawSubscription {
 
     /// Construct with rate limit (microseconds between deliveries) +
     /// instance.
-    pub const fn new_with(
-        metadata: &'static orb_metadata,
-        interval_us: u32,
-        instance: u8,
-    ) -> Self {
+    pub const fn new_with(metadata: &'static orb_metadata, interval_us: u32, instance: u8) -> Self {
         Self {
             cb: Cell::new(core::ptr::null_mut()),
             waker: AtomicWaker::new(),

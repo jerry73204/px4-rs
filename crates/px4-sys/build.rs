@@ -11,9 +11,10 @@
 //!      requires the CMake-generated `px4_boardconfig.h`, so it only
 //!      works inside a real PX4 build invocation.
 
-use std::env;
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::{
+    env, fs,
+    path::{Path, PathBuf},
+};
 
 const MIN_PX4_MARKER_FILE: &str = "platforms/common/uORB/uORB.h";
 // `orb_id_size_t` is a typedef introduced exactly at v1.15 and lives in the

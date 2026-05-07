@@ -97,11 +97,15 @@ pub(crate) mod mock {
     //! the last generation they observed so `try_recv` can return the
     //! most recent message without re-delivering.
 
-    use core::ffi::c_void;
-    use core::sync::atomic::{AtomicU32, Ordering};
-    use std::collections::HashMap;
-    use std::ffi::CStr;
-    use std::sync::{Arc, Mutex, OnceLock};
+    use core::{
+        ffi::c_void,
+        sync::atomic::{AtomicU32, Ordering},
+    };
+    use std::{
+        collections::HashMap,
+        ffi::CStr,
+        sync::{Arc, Mutex, OnceLock},
+    };
 
     use px4_sys::orb_metadata;
 

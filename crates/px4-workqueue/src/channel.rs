@@ -38,12 +38,14 @@
 //! }
 //! ```
 
-use core::cell::UnsafeCell;
-use core::future::Future;
-use core::mem::MaybeUninit;
-use core::pin::Pin;
-use core::sync::atomic::{AtomicUsize, Ordering};
-use core::task::{Context, Poll};
+use core::{
+    cell::UnsafeCell,
+    future::Future,
+    mem::MaybeUninit,
+    pin::Pin,
+    sync::atomic::{AtomicUsize, Ordering},
+    task::{Context, Poll},
+};
 
 use crate::AtomicWaker;
 

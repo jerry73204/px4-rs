@@ -1,8 +1,10 @@
 //! Process-group helpers. Lifted from `nros-tests/src/process.rs`,
 //! trimmed to what `Px4Sitl` needs.
 
-use std::process::{Child, Command};
-use std::time::{Duration, Instant};
+use std::{
+    process::{Child, Command},
+    time::{Duration, Instant},
+};
 
 /// Put the spawned process into its own process group + arrange for
 /// it to receive SIGKILL if the test runner dies.

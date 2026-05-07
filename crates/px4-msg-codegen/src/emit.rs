@@ -3,8 +3,10 @@
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, quote};
 
-use crate::layout::{LaidOutField, LaidOutMsg, rust_type_for};
-use crate::model::Constant;
+use crate::{
+    layout::{LaidOutField, LaidOutMsg, rust_type_for},
+    model::Constant,
+};
 
 /// Crate paths used in the emitted code. Defaults point at the
 /// underlying workspace crates, but the proc-macro can override them

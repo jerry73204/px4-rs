@@ -31,8 +31,11 @@ fn gyro_watch_subscribes_to_sensor_gyro() {
     let before = sensor_gyro_sub_count(&sitl);
 
     sitl.shell("gyro_watch start").expect("gyro_watch start");
-    sitl.wait_for_log("watcher started, threshold=2.5 rad/s", Duration::from_secs(2))
-        .expect("watcher task never logged its threshold banner");
+    sitl.wait_for_log(
+        "watcher started, threshold=2.5 rad/s",
+        Duration::from_secs(2),
+    )
+    .expect("watcher task never logged its threshold banner");
 
     // Give the broker a moment to register the new subscriber. The
     // `Subscription::recv()` call is what triggers

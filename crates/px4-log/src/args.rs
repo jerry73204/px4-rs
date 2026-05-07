@@ -9,8 +9,10 @@
 //! `Args` is `Copy` and zero-sized beyond the (argc, argv) pair, so
 //! it's free to pass around and re-iterate.
 
-use core::ffi::{CStr, c_char, c_int};
-use core::marker::PhantomData;
+use core::{
+    ffi::{CStr, c_char, c_int},
+    marker::PhantomData,
+};
 
 /// View of a PX4 module entry point's `argv`.
 ///
