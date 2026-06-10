@@ -130,12 +130,21 @@ pub fn parse_str(name: &str, text: &str) -> Result<MsgDef, ParseError> {
     let snake_name = camel_to_snake(name);
     let topics = topics.unwrap_or_else(|| vec![snake_name.clone()]);
 
+    // PX4 1.16+ — capture the `uint32 MESSAGE_VERSION = N` constant on the model
+    // (it stays in `constants` too). Version-aware tooling reads this; an
+    // unparseable or absent value leaves it `None`.
+    let message_version = constants
+        .iter()
+        .find(|c| c.name == "MESSAGE_VERSION")
+        .and_then(|c| c.value.trim().parse::<u32>().ok());
+
     Ok(MsgDef {
         name: name.to_string(),
         snake_name,
         fields,
         constants,
         topics,
+        message_version,
     })
 }
 
@@ -208,11 +217,28 @@ uint8 ORB_QUEUE_LENGTH = 8
         assert_eq!(def.constants.len(), 1);
         assert_eq!(def.constants[0].name, "ORB_QUEUE_LENGTH");
         assert_eq!(def.topics, vec!["sensor_gyro"]);
+        // No MESSAGE_VERSION constant → unversioned.
+        assert_eq!(def.message_version, None);
 
         match &def.fields[8].ty {
             FieldType::ScalarArray(Scalar::U8, 3) => {}
             other => panic!("expected uint8[3], got {other:?}"),
         }
+    }
+
+    // PX4 1.16+ — `uint32 MESSAGE_VERSION = N` is captured on the model (and
+    // stays in `constants`).
+    #[test]
+    fn captures_message_version() {
+        let text = "\
+uint32 MESSAGE_VERSION = 3
+uint64 timestamp
+float32[3] position
+";
+        let def = parse_str("VehicleOdometry", text).unwrap();
+        assert_eq!(def.message_version, Some(3));
+        // Still emitted as a constant.
+        assert!(def.constants.iter().any(|c| c.name == "MESSAGE_VERSION"));
     }
 
     #[test]

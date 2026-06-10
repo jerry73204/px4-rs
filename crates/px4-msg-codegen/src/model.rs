@@ -104,6 +104,11 @@ pub struct MsgDef {
     /// Topic names produced by this msg. Defaults to `[snake_name]`
     /// unless the file has a `# TOPICS a b c` directive.
     pub topics: Vec<String>,
+    /// PX4 1.16+ `uint32 MESSAGE_VERSION = N` (the topic's wire-compat version),
+    /// captured from the constants for version-aware tooling. `None` if the msg
+    /// declares no `MESSAGE_VERSION` constant (legacy / unversioned topics). The
+    /// `pub const MESSAGE_VERSION` is still emitted from `constants`.
+    pub message_version: Option<u32>,
 }
 
 /// Convert CamelCase → snake_case using PX4's convention
