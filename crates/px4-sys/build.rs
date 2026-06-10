@@ -219,7 +219,7 @@ fn compile_trampolines(crate_dir: &Path, px4_dir: &Path) {
             if let Ok(name) = env::var("PX4_RS_BOARD_NAME") {
                 build.define(&format!("CONFIG_ARCH_BOARD_{name}"), None);
             }
-            for inc in nuttx_includes(&px4_dir, build_dir.as_deref()) {
+            for inc in nuttx_includes(px4_dir, build_dir.as_deref()) {
                 if inc.is_dir() {
                     build.include(inc);
                 }
@@ -229,7 +229,7 @@ fn compile_trampolines(crate_dir: &Path, px4_dir: &Path) {
             // toolchain's missing/broken ones. `cc` doesn't have a
             // dedicated `-isystem` API so we splice the flags
             // manually.
-            for sys_inc in nuttx_system_includes(&px4_dir) {
+            for sys_inc in nuttx_system_includes(px4_dir) {
                 if sys_inc.is_dir() {
                     build.flag("-isystem").flag(sys_inc.to_str().unwrap());
                 }
