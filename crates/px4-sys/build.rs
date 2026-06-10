@@ -10,6 +10,13 @@
 //!      compile `wrapper.cpp` against the real PX4 headers. That path
 //!      requires the CMake-generated `px4_boardconfig.h`, so it only
 //!      works inside a real PX4 build invocation.
+//!
+//! Supported PX4 window: `px4-sys` requires **>= v1.15** (the `orb_id_size_t`
+//! ABI). The message-versioning codegen (`cargo xtask gen-msgs` enumerating
+//! `msg/versioned/`) needs **>= v1.16**; the combined path is validated against
+//! **v1.17.0**, the tag nano-ros pins (`nros-sdk-index.toml source.px4-autopilot`).
+//! On v1.17.0, gen-msgs emits 235 messages incl. the versioned core ROS 2
+//! interface topics.
 
 use std::{
     env, fs,
