@@ -68,7 +68,16 @@ pub fn emit_with_paths(laid: &LaidOutMsg, paths: &EmitPaths) -> TokenStream {
     let topic_items: Vec<TokenStream> = laid
         .topics
         .iter()
-        .map(|topic_name| emit_topic(&laid.name, topic_name, size, &laid.constants, paths))
+        .map(|topic_name| {
+            emit_topic(
+                &laid.name,
+                topic_name,
+                size,
+                laid.message_hash,
+                &laid.constants,
+                paths,
+            )
+        })
         .collect();
 
     quote! {
@@ -100,15 +109,19 @@ pub fn emit_with_paths(laid: &LaidOutMsg, paths: &EmitPaths) -> TokenStream {
 /// name as `o_name`; PX4's broker resolves nodes by name, so this
 /// interoperates with C++ publishers/subscribers of the same name.
 ///
-/// Limitations vs. PX4's canonical metadata:
-///   * `message_hash` is `0` (compatibility check disabled — use the
-///     same struct definition on both sides).
+/// `message_hash` is PX4's real FNV-1a hash over the flattened field string
+/// (phase 232.3), so a user-introduced topic absent from PX4's canonical table
+/// still passes the DDS client's compatibility check. Standard topics override
+/// this with the canonical `orb_metadata` at runtime regardless.
+///
+/// Remaining limitation vs. PX4's canonical metadata:
 ///   * `o_id` is `u16::MAX` (sentinel; not used by the standard
 ///     orb_advertise/publish/subscribe path).
 fn emit_topic(
     struct_name: &str,
     topic_name: &str,
     size: usize,
+    message_hash: u32,
     constants: &[Constant],
     paths: &EmitPaths,
 ) -> TokenStream {
@@ -146,7 +159,7 @@ fn emit_topic(
                 o_name: #cname_ident.as_ptr(),
                 o_size: #size_u16,
                 o_size_no_padding: #size_u16,
-                message_hash: 0,
+                message_hash: #message_hash,
                 o_id: u16::MAX,
                 o_queue: (#queue) as u8,
             }

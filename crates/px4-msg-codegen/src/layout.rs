@@ -15,6 +15,18 @@ use crate::{
 
 const ALIGN_TO: usize = 8;
 
+/// FNV-1a 32-bit hash — PX4's `hash_32_fnv1a` (seed `0x811c9dc5`, prime
+/// `0x01000193`), iterated over the bytes of `data`. uORB message-definition
+/// strings are ASCII, so byte iteration matches PX4's per-char `ord()`.
+pub fn fnv1a_32(data: &str) -> u32 {
+    let mut hash: u32 = 0x811c_9dc5;
+    for b in data.bytes() {
+        hash ^= b as u32;
+        hash = hash.wrapping_mul(0x0100_0193);
+    }
+    hash
+}
+
 #[derive(Debug, Clone)]
 pub enum LaidOutField {
     /// Field from the source .msg.
@@ -31,6 +43,11 @@ pub struct LaidOutMsg {
     pub constants: Vec<Constant>,
     pub topics: Vec<String>,
     pub size: usize,
+    /// PX4's `message_hash` (FNV-1a over the flattened field string). Lets a
+    /// user-introduced topic absent from PX4's canonical `orb_metadata` table
+    /// carry the same hash PX4 would compute (phase 232.3). Standard topics
+    /// resolve their real hash canonically at runtime; this is the fallback.
+    pub message_hash: u32,
 }
 
 /// Context for resolving nested types. Caches parsed + laid-out
@@ -107,6 +124,8 @@ impl Resolver {
             size_accum += tail;
         }
 
+        let message_hash = self.message_hash(def)?;
+
         let laid_out = LaidOutMsg {
             name: def.name.clone(),
             snake_name: def.snake_name.clone(),
@@ -114,9 +133,44 @@ impl Resolver {
             constants: def.constants.clone(),
             topics: def.topics.clone(),
             size: size_accum,
+            message_hash,
         };
         self.cache.insert(def.name.clone(), laid_out.clone());
         Ok(laid_out)
+    }
+
+    /// PX4's `message_hash`: FNV-1a over the recursively-flattened
+    /// `<type> <name>\n` field string. Mirrors
+    /// `Tools/msg/px_generate_uorb_topic_helper.py::get_message_hash` — fields
+    /// in declaration order (NOT the laid-out/padded order), no constants, no
+    /// padding, with nested types' fields spliced in after the field line (once,
+    /// regardless of array count).
+    pub fn message_hash(&self, def: &MsgDef) -> Result<u32, ParseError> {
+        let mut s = String::new();
+        self.message_hash_fields(def, &mut s)?;
+        Ok(fnv1a_32(&s))
+    }
+
+    fn message_hash_fields(&self, def: &MsgDef, out: &mut String) -> Result<(), ParseError> {
+        for field in &def.fields {
+            let tok = match &field.ty {
+                FieldType::Scalar(s) => s.px4_name().to_string(),
+                FieldType::ScalarArray(s, n) => format!("{}[{}]", s.px4_name(), n),
+                FieldType::Nested(name) => name.clone(),
+                FieldType::NestedArray(name, n) => format!("{name}[{n}]"),
+            };
+            out.push_str(&tok);
+            out.push(' ');
+            out.push_str(&field.name);
+            out.push('\n');
+
+            if let FieldType::Nested(name) | FieldType::NestedArray(name, _) = &field.ty {
+                let path = self.find(name)?;
+                let nested = parser::parse_file(&path)?;
+                self.message_hash_fields(&nested, out)?;
+            }
+        }
+        Ok(())
     }
 
     fn find(&self, name: &str) -> Result<PathBuf, ParseError> {
@@ -176,6 +230,26 @@ mod tests {
 
     fn dummy_path() -> PathBuf {
         std::env::temp_dir()
+    }
+
+    // Phase 232.3 — FNV-1a + message_hash.
+    #[test]
+    fn fnv1a_known_vectors() {
+        // Standard FNV-1a 32-bit test vectors.
+        assert_eq!(fnv1a_32(""), 0x811c_9dc5);
+        assert_eq!(fnv1a_32("a"), 0xe40c_292c);
+        assert_eq!(fnv1a_32("foobar"), 0xbf9c_f968);
+    }
+
+    #[test]
+    fn message_hash_matches_flattened_field_string() {
+        // A flat message hashes its `<type> <name>\n` lines in declaration order
+        // (NOT padded/sorted) — array types keep their `[N]`.
+        let def = parser::parse_str("Demo", "uint64 timestamp\nfloat32[3] position\n").unwrap();
+        let r = Resolver::new(vec![]);
+        let h = r.message_hash(&def).unwrap();
+        assert_eq!(h, fnv1a_32("uint64 timestamp\nfloat32[3] position\n"));
+        assert_ne!(h, 0);
     }
 
     #[test]

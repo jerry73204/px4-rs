@@ -47,6 +47,25 @@ impl Scalar {
         }
     }
 
+    /// The PX4 `.msg` type token (the inverse of [`parse`](Self::parse)) — used
+    /// to reconstruct the field string PX4 hashes for `message_hash`.
+    pub fn px4_name(self) -> &'static str {
+        match self {
+            Self::Bool => "bool",
+            Self::Char => "char",
+            Self::I8 => "int8",
+            Self::I16 => "int16",
+            Self::I32 => "int32",
+            Self::I64 => "int64",
+            Self::U8 => "uint8",
+            Self::U16 => "uint16",
+            Self::U32 => "uint32",
+            Self::U64 => "uint64",
+            Self::F32 => "float32",
+            Self::F64 => "float64",
+        }
+    }
+
     pub fn parse(token: &str) -> Option<Self> {
         Some(match token {
             "bool" => Self::Bool,
