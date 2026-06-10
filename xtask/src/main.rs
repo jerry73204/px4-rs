@@ -146,37 +146,51 @@ fn gen_msgs(rest: &[String]) -> Result<(), String> {
     });
     fs::create_dir_all(&out).map_err(|e| format!("mkdir {}: {e}", out.display()))?;
 
-    let entries =
-        fs::read_dir(&msg_dir).map_err(|e| format!("readdir {}: {e}", msg_dir.display()))?;
+    // PX4 1.16+ moved the versioned core ROS 2 interface topics into
+    // `msg/versioned/` (e.g. VehicleOdometry, VehicleCommand). Enumerate both
+    // directories, and pass both on the codegen `search_path` so nested-type
+    // resolution finds versioned types. Versioned files are processed last so a
+    // versioned topic shadows any same-named legacy entry.
+    let versioned_dir = msg_dir.join("versioned");
+    let mut search_path = vec![msg_dir.clone()];
+    let mut msg_dirs = vec![msg_dir.clone()];
+    if versioned_dir.is_dir() {
+        search_path.push(versioned_dir.clone());
+        msg_dirs.push(versioned_dir);
+    }
+
     let mut count = 0usize;
     let mut skipped = Vec::<(String, String)>::new();
 
-    for entry in entries {
-        let entry = entry.map_err(|e| format!("readdir: {e}"))?;
-        let path = entry.path();
-        if path.extension().and_then(|s| s.to_str()) != Some("msg") {
-            continue;
-        }
-        match px4_msg_codegen::generate(&path, vec![msg_dir.clone()]) {
-            Ok(ts) => {
-                let stem = path
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("unknown");
-                let snake = px4_msg_codegen::model::camel_to_snake(stem);
-                let out_file = out.join(format!("{snake}.rs"));
-                let contents = ts.to_string();
-                fs::write(&out_file, contents)
-                    .map_err(|e| format!("write {}: {e}", out_file.display()))?;
-                count += 1;
+    for dir in &msg_dirs {
+        let entries = fs::read_dir(dir).map_err(|e| format!("readdir {}: {e}", dir.display()))?;
+        for entry in entries {
+            let entry = entry.map_err(|e| format!("readdir: {e}"))?;
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) != Some("msg") {
+                continue;
             }
-            Err(e) => {
-                let stem = path
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("?")
-                    .to_string();
-                skipped.push((stem, e.to_string()));
+            match px4_msg_codegen::generate(&path, search_path.clone()) {
+                Ok(ts) => {
+                    let stem = path
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("unknown");
+                    let snake = px4_msg_codegen::model::camel_to_snake(stem);
+                    let out_file = out.join(format!("{snake}.rs"));
+                    let contents = ts.to_string();
+                    fs::write(&out_file, contents)
+                        .map_err(|e| format!("write {}: {e}", out_file.display()))?;
+                    count += 1;
+                }
+                Err(e) => {
+                    let stem = path
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("?")
+                        .to_string();
+                    skipped.push((stem, e.to_string()));
+                }
             }
         }
     }
